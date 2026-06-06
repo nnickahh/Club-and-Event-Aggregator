@@ -33,7 +33,7 @@
         </div>
 
         <div class="calendar-grid" id="mainCalendar">
-            </div>
+        </div>
     </main>
 
     <script src="calendar.js"></script>

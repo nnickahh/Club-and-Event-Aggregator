@@ -115,13 +115,13 @@
                 </div>
             </div>
             
-            <a href="StudentDashboard.php"><button type="submit" name="submit" class="btn-primary">Log In</button></a>
+            <a href="AdminDashboard.php"><button type="submit" name="submit" class="btn-primary">Log In</button></a>
             
             <div class="links">
                 <a href="ForgotPassword.php">Forgot Password?</a>
             </div>
             <div class="links center-links">
-                Don't have an account? <a href="CreateAdmin.php" class="link-primary"><u>Sign Up</u></a>
+                Don't have an account? <a href="CreateAdmin.php" class="link-primary">Sign Up</a>
             </div>
         </form>
     </div>

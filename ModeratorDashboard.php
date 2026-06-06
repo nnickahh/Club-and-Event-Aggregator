@@ -4,13 +4,18 @@
 
     // 1. Security: Ensure only the System Host/Moderator can access
     if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'moderator') {
-        header("Location: ModeratorDashboard.php");
+        header("Location: ModeratorLogin.php");
         exit();
     }
 
     // 2. Fetch all clubs that are currently 'pending'
-    $query = "SELECT * FROM admins WHERE status = 'pending' ORDER BY created_at ASC";
-    $result = $conn->query($query);
+    try {
+        $query = "SELECT * FROM admins WHERE status = 'pending' ORDER BY created_at ASC";
+        $result = $conn->query($query);
+    } catch (mysqli_sql_exception $e) {
+        error_log('ModeratorDashboard DB error: ' . $e->getMessage());
+        $result = false;
+    }
 ?>
 
 <!DOCTYPE html>
