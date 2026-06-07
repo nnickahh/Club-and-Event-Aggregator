@@ -348,7 +348,7 @@ input:focus {
 }
 .dash-greeting { font-size: 13px; color: var(--ink-3); font-weight: 400; margin-bottom: 6px; }
 .dash-title {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'DM Sans', system-ui, sans-serif;
     font-size: 32px; color: var(--ink);
     letter-spacing: -0.5px; line-height: 1.1;
 }
@@ -364,7 +364,7 @@ input:focus {
     text-align: center;
     min-width: 88px;
 }
-.stat-pill .num { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--ink); line-height: 1; }
+.stat-pill .num { font-family: 'DM Sans', system-ui, sans-serif; font-size: 28px; color: var(--ink); line-height: 1; }
 .stat-pill .lbl { font-size: 11px; color: var(--ink-3); margin-top: 4px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-pill.accent { background: var(--red); border-color: var(--red); }
 .stat-pill.accent .num { color: white; }
@@ -559,11 +559,11 @@ input:focus {
 }
 
 #monthYearDisplay {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'DM Sans', system-ui, sans-serif;
     font-size: 26px;
     font-weight: 400;
     letter-spacing: -0.3px;
-    min-width: 200px;
+    min-width: 220px;
     text-align: center;
     color: var(--ink);
 }
@@ -621,7 +621,7 @@ input:focus {
 .calendar-toggle button.active {
     background: var(--red);
     color: white;
-    box-shadow: 0 2px 10px rgba(237,28,36,0.28);
+
 }
 
 /* Calendar grid container */
@@ -635,9 +635,6 @@ input:focus {
     box-shadow: none;
     transition: box-shadow 0.2s ease;
     animation: calFade 0.3s ease both;
-}
-.calendar-grid:hover {
-    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
 }
 
 @keyframes calFade {
@@ -1549,6 +1546,10 @@ input:focus {
 }
 /* ─── WEEK TIME-GRID VIEW ─────────────────────────────────────────────────── */
 
+/* Shared column template — gutter + 7 equal day cols
+   Used on BOTH .wtg-header and .wtg-body so lines stay perfectly aligned */
+:root { --wtg-gutter: 56px; }
+
 .calendar-grid.week-time-grid {
     display: block;
     overflow: hidden;
@@ -1557,30 +1558,42 @@ input:focus {
     background: var(--surface);
     box-shadow: none;
     transition: box-shadow 0.2s ease;
+    animation: calFade 0.3s ease both;
 }
-
 .calendar-grid.week-time-grid:hover {
     box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+.calendar-grid:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+.calendar-toggle button.active:hover {
+    box-shadow: 0 2px 10px rgba(237,28,36,0.28);
 }
 
 .wtg-wrapper {
     display: flex;
     flex-direction: column;
-    height: 680px;
+    max-height: 680px;
     font-family: 'DM Sans', system-ui, sans-serif;
 }
 
-/* ── Column header row ── */
-.wtg-header {
+/* BOTH header and body use identical grid columns — this is what aligns the lines */
+.wtg-header,
+.wtg-body {
     display: grid;
-    grid-template-columns: 60px repeat(7, 1fr);
+    grid-template-columns: var(--wtg-gutter) repeat(7, 1fr);
+}
+
+.wtg-header {
     border-bottom: 1px solid var(--border);
     background: #fafaf9;
     flex-shrink: 0;
 }
 
+/* Gutter cell in header — must match gutter column width exactly */
 .wtg-time-gutter-head {
     border-right: 1px solid var(--border);
+    /* no width needed — grid column controls it */
 }
 
 .wtg-col-head {
@@ -1588,17 +1601,12 @@ input:focus {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 12px 6px 10px;
+    padding: 10px 6px 8px;
     border-left: 1px solid var(--border);
     gap: 3px;
-    transition: background 0.15s;
 }
+.wtg-col-head.wtg-today { background: var(--red-light); }
 
-.wtg-col-head.wtg-today {
-    background: var(--red-light);
-}
-
-/* Match clubs-title font: DM Sans weight 600 */
 .wtg-day-name {
     font-family: 'DM Sans', system-ui, sans-serif;
     font-size: 10px;
@@ -1612,103 +1620,82 @@ input:focus {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+    min-width: 38px;
+    height: 26px;
+    padding: 0 5px;
+    border-radius: 13px;
     font-family: 'DM Sans', system-ui, sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--ink);
-    line-height: 1;
 }
+.wtg-day-num--today { background: var(--red); color: white; }
 
-.wtg-day-num--today {
-    background: var(--red);
-    color: white;
-}
-
-/* ── Scrollable body ── */
+/* Body */
 .wtg-body {
-    display: grid;
-    grid-template-columns: 60px repeat(7, 1fr);
+    align-items: start;
     overflow-y: auto;
     flex: 1;
     scroll-behavior: smooth;
-    /* Align rows: time labels sit at top of each hour row */
-    align-items: start;
 }
-
 .wtg-body::-webkit-scrollbar { width: 5px; }
 .wtg-body::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 4px; }
 
-/* ── Time gutter ── */
+/* Time gutter — same column, aligns perfectly with header gutter */
 .wtg-time-gutter {
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--border);
     background: #fafaf9;
-    position: sticky;
-    left: 0;
-    z-index: 2;
+    align-self: start;
 }
 
 .wtg-hour-label {
     display: flex;
-    align-items: flex-start;   /* label sits at TOP of its row — aligns with grid line */
+    align-items: flex-start;
     justify-content: flex-end;
     padding: 4px 8px 0 0;
     font-family: 'DM Sans', system-ui, sans-serif;
     font-size: 10px;
     font-weight: 600;
     color: var(--ink-3);
-    letter-spacing: 0.3px;
     box-sizing: border-box;
     flex-shrink: 0;
-    /* height set inline via JS to match HOUR_HEIGHT */
+    /* height matched to HOUR_HEIGHT via inline style in JS */
 }
 
-/* ── Day columns ── */
+/* Day columns */
 .wtg-day-col {
     position: relative;
     border-left: 1px solid var(--border);
     box-sizing: border-box;
+    align-self: start;
 }
+.wtg-day-col.wtg-col-today { background: rgba(237,28,36,0.018); }
 
-.wtg-day-col.wtg-col-today {
-    background: rgba(237,28,36,0.02);
-}
-
-/* Hour rows — each is HOUR_HEIGHT tall, matching the label */
 .wtg-hour-row {
     border-bottom: 1px solid rgba(0,0,0,0.06);
     box-sizing: border-box;
     flex-shrink: 0;
-    /* height set inline via JS */
+    position: relative;
 }
-
-/* Half-hour dashed line inside each hour row */
 .wtg-hour-row::after {
     content: '';
     display: block;
-    border-bottom: 1px dashed rgba(0,0,0,0.04);
-    margin-top: 50%;
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    border-top: 1px dashed rgba(0,0,0,0.04);
 }
 
-/* Events layer */
 .wtg-events-layer {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     pointer-events: none;
 }
 
-/* Individual event block */
 .wtg-event {
     position: absolute;
-    left: 4px;
-    right: 4px;
+    left: 3px; right: 3px;
     border-radius: var(--radius-sm);
     overflow: hidden;
     cursor: pointer;
@@ -1716,24 +1703,22 @@ input:focus {
     background: var(--red);
     border-left: 3px solid var(--red-dark);
     transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-    min-height: 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+    min-height: 22px;
 }
-
 .wtg-event:hover {
     transform: translateX(2px) scale(1.01);
     box-shadow: 0 4px 14px rgba(0,0,0,0.18);
     filter: brightness(1.05);
     z-index: 10;
 }
-
 .wtg-event[data-color="green"]  { background: var(--green);  border-left-color: #1f5c33; }
 .wtg-event[data-color="blue"]   { background: var(--blue);   border-left-color: #0e3d7a; }
 .wtg-event[data-color="amber"]  { background: var(--amber);  border-left-color: #6b4508; }
 .wtg-event[data-color="purple"] { background: var(--purple); border-left-color: #3e2680; }
 
 .wtg-event-inner {
-    padding: 4px 7px;
+    padding: 4px 6px;
     height: 100%;
     box-sizing: border-box;
     display: flex;
@@ -1741,84 +1726,43 @@ input:focus {
     gap: 2px;
     overflow: hidden;
 }
-
 .wtg-event-title {
-    font-size: 11px;
-    font-weight: 700;
-    color: white;
-    line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 11px; font-weight: 700; color: white;
+    line-height: 1.3; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
 }
-
 .wtg-event-time {
-    font-size: 10px;
-    color: rgba(255,255,255,0.85);
-    font-weight: 500;
-    white-space: nowrap;
+    font-size: 10px; color: rgba(255,255,255,0.85);
+    font-weight: 500; white-space: nowrap;
 }
-
 .wtg-event-venue {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 10px;
-    color: rgba(255,255,255,0.8);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: flex; align-items: center; gap: 3px;
+    font-size: 10px; color: rgba(255,255,255,0.8);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-
 .wtg-event-venue svg {
-    width: 9px;
-    height: 9px;
-    stroke: rgba(255,255,255,0.8);
-    fill: none;
-    stroke-width: 2;
-    flex-shrink: 0;
+    width: 9px; height: 9px;
+    stroke: rgba(255,255,255,0.8); fill: none;
+    stroke-width: 2; flex-shrink: 0;
 }
-
 .wtg-event-club {
-    font-size: 9px;
-    color: rgba(255,255,255,0.7);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 9px; color: rgba(255,255,255,0.7);
+    font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
 }
 
-/* "Now" red line */
+/* Now line */
 .wtg-now-line {
     position: absolute;
-    left: -1px;
-    right: 0;
-    height: 2px;
-    background: var(--red);
-    z-index: 5;
-    pointer-events: none;
+    left: -1px; right: 0;
+    height: 2px; background: var(--red);
+    z-index: 5; pointer-events: none;
 }
-
 .wtg-now-line::before {
     content: '';
     position: absolute;
-    left: -3px;
-    top: -3px;
-    width: 8px;
-    height: 8px;
-    background: var(--red);
-    border-radius: 50%;
-}
-
-.wtg-empty {
-    grid-column: 2 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 20px;
-    color: var(--ink-3);
-    font-size: 14px;
-    text-align: center;
+    left: -3px; top: -3px;
+    width: 8px; height: 8px;
+    background: var(--red); border-radius: 50%;
 }
