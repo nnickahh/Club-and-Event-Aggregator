@@ -23,9 +23,7 @@
             Please log in again with your new credentials.
         </p>
         
-        <a href="StudentLogin.php" class="btn-primary btn-primary-link-center">
-            Back to Login
-        </a>
+        <a href="StudentLogin.php" class="btn-primary btn-primary-link-center">Back to Login</a>
     </div>
 </body>
 </html>

@@ -10,7 +10,8 @@
 
     // 2. Fetch all clubs that are currently 'pending'
     try {
-        $query = "SELECT * FROM admins WHERE status = 'pending' ORDER BY created_at ASC";
+        // FIXED: Removed ORDER BY created_at because that column doesn't exist in your table schema
+        $query = "SELECT * FROM admins WHERE status = 'pending'";
         $result = $conn->query($query);
     } catch (mysqli_sql_exception $e) {
         error_log('ModeratorDashboard DB error: ' . $e->getMessage());
@@ -46,19 +47,21 @@
                     <article class="event-card">
                         <h3><?php echo htmlspecialchars($row['clubName']); ?></h3>
                         <div class="event-meta">
-                            <strong>Admin:</strong> <?php echo htmlspecialchars($row['name']); ?><br>
+                            <strong>Staff / Student ID:</strong> <?php echo htmlspecialchars($row['adminID']); ?><br>
+                            <strong>Admin Name:</strong> <?php echo htmlspecialchars($row['name']); ?><br>
+                            <strong>Club Name:</strong> <?php echo htmlspecialchars($row['clubName']); ?><br>
                             <strong>Email:</strong> <?php echo htmlspecialchars($row['clubEmail']); ?>
                         </div>
                         
                         <div class="action-buttons" style="display: flex; gap: 10px;">
                             <form action="ProcessApproval.php" method="POST" style="flex: 1;">
-                                <input type="hidden" name="adminID" value="<?php echo $row['adminID']; ?>">
+                                <input type="hidden" name="adminID" value="<?php echo htmlspecialchars($row['adminID']); ?>">
                                 <input type="hidden" name="action" value="approve">
                                 <button type="submit" class="btn-primary" style="background-color: #4CAF50; border: none;">Approve</button>
                             </form>
                             
                             <form action="ProcessApproval.php" method="POST" style="flex: 1;">
-                                <input type="hidden" name="adminID" value="<?php echo $row['adminID']; ?>">
+                                <input type="hidden" name="adminID" value="<?php echo htmlspecialchars($row['adminID']); ?>">
                                 <input type="hidden" name="action" value="decline">
                                 <button type="submit" class="btn-outline" style="color: #ED1C24; border-color: #ED1C24; width: 100%;">Decline</button>
                             </form>

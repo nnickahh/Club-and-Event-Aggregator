@@ -47,7 +47,7 @@
                 </div>
                 <div class="stat-pill">
                     <div class="num"><?php echo isset($_SESSION['rsvp_count']) ? $_SESSION['rsvp_count'] : '—'; ?></div>
-                    <div class="lbl">My RSVPs</div>
+                    <div class="lbl">My Events</div>
                 </div>
                 <div class="stat-pill">
                     <div class="num"><?php echo isset($_SESSION['club_count']) ? $_SESSION['club_count'] : '—'; ?></div>
@@ -190,6 +190,5 @@
             });
         });
     </script>
- 
 </body>
 </html>

@@ -1,6 +1,10 @@
 <!--CreateStudentAccount.php-->
 <!--Student create new account-->
 <?php
+    // Turn on error reporting for debugging
+    ini_set('display_errors', 1);
+    error_reporting(E_ALL);
+
     require_once 'db_connect.php';
     $message = "";
 
@@ -11,7 +15,7 @@
         $password = $_POST['password'];
         $confirm_password = $_POST['confirm_password'];
 
-        // Backend Validation
+        // Backend Validation requirements
         $uppercase = preg_match('@[A-Z]@', $password);
         $lowercase = preg_match('@[a-z]@', $password);
         $number    = preg_match('@[0-9]@', $password);
@@ -33,19 +37,24 @@
             if ($result->num_rows > 0) {
                 $message = "<p class='msg-error'>Student ID or Email already registered!</p>";
             } else {
+                // Generate secure Bcrypt hash (Fits into your updated VARCHAR(255) column)
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
-                // Use PREPARED STATEMENT for Insertion (Matches Literature Review Sec 2.6)
-                $insert_stmt = $conn->prepare("INSERT INTO students (name, studentID, email, password) VALUES (?, ?, ?, ?)");
-                $insert_stmt->bind_param("ssss", $fullname, $student_id, $email, $hashed_password);
+                // FIXED: Explicitly mapped structure to match your exact phpMyAdmin column positions
+                // 1. studentID | 2. name | 3. email | 4. password
+                $insert_stmt = $conn->prepare("INSERT INTO students (studentID, name, email, password) VALUES (?, ?, ?, ?)");
+                $insert_stmt->bind_param("ssss", $student_id, $fullname, $email, $hashed_password);
 
                 if ($insert_stmt->execute()) {
+                    $insert_stmt->close();
                     header("Location: RegisterSuccess.php");
                     exit();
                 } else {
-                    $message = "<p class='msg-error'>Error: " . $conn->error . "</p>";
+                    $message = "<p class='msg-error'>Registration failed: " . htmlspecialchars($insert_stmt->error) . "</p>";
                 }
+                $insert_stmt->close();
             }
+            $stmt->close();
         }
     }
 ?>

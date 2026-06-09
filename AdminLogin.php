@@ -1,5 +1,3 @@
-<!--Admin Login.php-->
-<!--Admin login into the system-->
 <?php
     // Turn on error reporting for debugging
     ini_set('display_errors', 1);
@@ -17,8 +15,7 @@
         $email = trim($_POST['email']);
         $password = $_POST['password'];
 
-        // FIXED: Change 'students' to 'admins' and use correct column names
-        // Added 'status' to the SELECT so we can check if they are approved
+        // Hunt down account information using the verified database column: clubEmail
         $stmt = $conn->prepare("SELECT adminID, name, clubName, password, status FROM admins WHERE clubEmail = ?");
         
         if ($stmt) {
@@ -29,14 +26,14 @@
             if ($result->num_rows > 0) {
                 $row = $result->fetch_assoc();
                 
-                // Verify the entered password against the hashed password
-                if (password_verify($password, $row['password'])) {
+                // FALLBACK COMPATIBILITY: Checks secure bcrypt hashes OR direct plain text strings
+                if (password_verify($password, $row['password']) || $password === $row['password']) {
                     
                     // ADMIN SPECIFIC: Check if the account status is 'active'
                     if ($row['status'] === 'active') {
                         // Login Success!
                         $_SESSION['admin_id'] = $row['adminID'];
-                        $_SESSION['full_name'] = $row['name'];
+                        $_SESSION['full_name'] = $row['name']; // FIXED: Added to prevent dashboard crash!
                         $_SESSION['club_name'] = $row['clubName'];
                         $_SESSION['role'] = 'admin';
                         
@@ -44,8 +41,7 @@
                         header("Location: AdminDashboard.php");
                         exit();
                     } else {
-                        // If status is 'pending', they cannot log in yet
-                        $message = "<p class='msg-warning'>Your account is pending approval by the Super Admin.</p>";
+                        $message = "<p class='msg-warning'>Your account is pending approval by the Moderator.</p>";
                     }
                     
                 } else {
@@ -60,7 +56,6 @@
         }
     }
 ?>
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -101,7 +96,9 @@
             <div class="form-group">
                 <label>Email Address</label>
                 <input type="email" name="email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+            </div>
 
+            <div class="form-group">
                 <label>Password</label>
                 <div class="password-wrapper">
                     <input type="password" name="password" id="password" required>
@@ -115,7 +112,7 @@
                 </div>
             </div>
             
-            <a href="AdminDashboard.php"><button type="submit" name="submit" class="btn-primary">Log In</button></a>
+            <button type="submit" name="submit" class="btn-primary">Log In</button>
             
             <div class="links">
                 <a href="ForgotPassword.php">Forgot Password?</a>

@@ -28,8 +28,8 @@
             if ($result->num_rows > 0) {
                 $row = $result->fetch_assoc();
                 
-                // Verify the entered password against the hashed password
-                if (password_verify($password, $row['password'])) {
+                // New Code (Checks hashed passwords OR exact plain-text matching)
+                if (password_verify($password, $row['password']) || $password === $row['password']) {
                     
                     // MODERATOR SPECIFIC: Check if the account status is 'active'
                     if ($row['status'] === 'active') {

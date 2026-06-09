@@ -30,7 +30,7 @@
                 
                 // Verify the entered password against the hashed password (Bcrypt)
                 if (password_verify($password, $row['password'])) {
-                    
+
                     // Login Success! 
                     // Note: Students don't need 'status' check usually, but Admins do.
                     $_SESSION['student_id'] = $row['studentID'];
@@ -104,7 +104,8 @@
                 </div>
             </div>
             
-            <a href="StudentDashboard.php"><button type="submit" name="submit" class="btn-primary">Log In</button></a>
+            <!--  NEW LINE 97 (Triggers your PHP credential validation) -->
+            <button type="submit" name="submit" class="btn-primary">Log In</button>            
             
             <div class="links">
                 <a href="ForgotPassword.php">Forgot Password?</a>

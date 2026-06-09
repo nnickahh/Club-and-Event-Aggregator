@@ -28,12 +28,15 @@
         $number    = preg_match('@[0-9]@', $password);
         $special   = preg_match('@[^\w]@', $password); 
 
-        if(!$uppercase || !$lowercase || !$number || !$special || strlen($password) < 8) {
+        if (!ctype_alnum($admin_id)) {
+            $message = "<p class='msg-error'>Staff ID cannot contain spaces or special characters (e.g. @, #, $).</p>";
+        }
+        elseif(!$uppercase || !$lowercase || !$number || !$special || strlen($password) < 8) {
             $message = "<p class='msg-error'>Password must be 8+ chars with uppercase, lowercase, number, and symbol.</p>";
         } 
         elseif ($password !== $confirm_password) {
             $message = "<p class='msg-error'>Passwords do not match!</p>";
-        } 
+        }
         else {
             // 2. Check if AdminID or Club Email exists (Prepared Statement)
             $check_stmt = $conn->prepare("SELECT adminID FROM admins WHERE adminID = ? OR clubEmail = ?");
@@ -121,10 +124,11 @@
                 <label>Full Name :</label>
                 <input type="text" name="fullname" required value="<?php echo isset($_POST['fullname']) ? htmlspecialchars($_POST['fullname']) : ''; ?>">
             </div>
-            
+          
             <div class="form-group">
                 <label>Staff ID / Student ID :</label>
-                <input type="text" name="staff_id" required placeholder="e.g. A138362" required value="<?php echo isset($_POST['staff_id']) ? htmlspecialchars($_POST['staff_id']) : ''; ?>">
+                <input type="text" name="staff_id" pattern="[a-zA-Z0-9]+" title="Only letters and numbers are allowed. No special characters or spaces." required 
+                    value="<?php echo isset($_POST['staff_id']) ? htmlspecialchars($_POST['staff_id']) : ''; ?>" />
             </div>
             
             <div class="form-group">
