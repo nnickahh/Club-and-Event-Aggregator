@@ -50,7 +50,7 @@
     <!-- Dynamic Admin Navbar Replacement incorporating the Profile Settings dropdown hooks -->
     <?php include 'AdminNavbar.php'; ?>
 
-    <main class="dashboard-container">
+    <main class="container">
         
         <header class="dashboard-header">
             <div>

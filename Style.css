@@ -140,22 +140,6 @@ input:focus {
     margin-bottom: 15px; 
 }
 
-.btn-primary { 
-    width: 100%; 
-    padding: 12px; 
-    background-color: #ED1C24; 
-    border: none; 
-    border-radius: 4px;
-    color: white; 
-    font-weight: bold; 
-    font-size: 15px; 
-    cursor: pointer;
-    margin-top: 10px; 
-    transition: background-color 0.2s ease;
-    box-sizing: border-box;
-    text-decoration: none;
-    display: inline-block;
-}
 
 .btn-primary:hover {
     background-color: #C1121C; 
@@ -528,8 +512,15 @@ input:focus {
     text-align: center;
     letter-spacing: 0.2px;
 }
-.btn-primary:hover   { background-color: var(--red-dark); }
-.btn-primary:active  { transform: scale(0.98); }
+
+.btn-primary:hover   { 
+    background-color: var(--red-dark); 
+}
+
+.btn-primary:active  { 
+    transform: scale(0.98); 
+}
+
 .event-poster {
     width: 100%;
     height: 300px;
@@ -692,8 +683,14 @@ input:focus {
     margin-bottom: 4px;
 }
 
-.calendar-day:hover { background: #fdf8f8; }
-.calendar-day:hover .day-num { background: var(--red-mid); color: var(--red); }
+.calendar-day:hover { 
+    background: #fdf8f8;
+}
+
+.calendar-day:hover .day-num { 
+    background: var(--red-mid); 
+    color: var(--red); 
+}
 
 /* Empty / out-of-month cells */
 .empty-day {
@@ -719,25 +716,6 @@ input:focus {
 .calendar-grid.week-mode .calendar-day:nth-child(n+16) { display: none; }
 
 /* Event pills inside cells */
-.calendar-event-pill {
-    background: var(--red);
-    color: white;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 7px;
-    border-radius: 4px;
-    margin-top: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    cursor: pointer;
-    display: block;
-    transition: background 0.15s, transform 0.12s;
-}
-.calendar-event-pill:hover {
-    background: var(--red-dark);
-    transform: translateX(1px);
-}
 .calendar-event-pill[data-color="green"]  { background: var(--green);  }
 .calendar-event-pill[data-color="blue"]   { background: var(--blue);   }
 .calendar-event-pill[data-color="amber"]  { background: var(--amber);  }
@@ -804,14 +782,6 @@ input:focus {
     font-weight: normal;
 }
 
-.event-list-container {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    overflow-y: auto;
-    max-height: 60px;
-}
-
 /* Container */
 .profile-dropdown {
     position: relative;
@@ -834,7 +804,7 @@ input:focus {
     font-weight: bold;
     font-size: 13px;
     cursor: pointer;
-    padding: 10px 0;
+    padding: 15px 0;
     display: flex;
     align-items: center;
     gap: 8px; 
@@ -2479,4 +2449,99 @@ body.premium-dashboard {
     background: #fef2f2;
     color: #b91c1c;
     border: 1px solid #fecaca;
+}
+
+/* ==========================================================================
+   INTERACTIVE WORKSPACE STATE TOGGLES (CLUB SETTINGS)
+   ========================================================================= */
+
+/* Default View Mode Input Styling */
+/* ==========================================================================
+   EDIT STATE TRANSFORM FOR MAIN PROFILE INPUT FIELDS
+   ========================================================================= */
+
+   .brand-meta-details-wrapper {
+    flex-grow: 1;
+    min-width: 250px;
+}
+
+.title-field-container {
+    margin: 4px 0 6px 0;
+}
+
+/* Base formatting for locked views */
+.editable-field {
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
+    padding: 4px 0 !important;
+    font-size: inherit;
+    font-family: inherit;
+    font-weight: inherit;
+    color: inherit;
+    width: 100%;
+    pointer-events: none;
+    resize: none;
+    outline: none;
+    box-sizing: border-box;
+}
+
+/* Ensure the title field looks like an h2 header originally */
+.editable-field.club-title-input {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--premium-ink-dark, #1a1a1a);
+    max-width: 600px;
+}
+
+/* Active Edit Mode Transformation Rules */
+body.is-editing-mode .editable-field:not(.disabled-field) {
+    background: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    padding: 12px 16px !important;
+    pointer-events: auto;
+    border-radius: 8px;
+}
+
+body.is-editing-mode textarea.editable-field {
+    resize: vertical;
+}
+
+body.is-editing-mode input.editable-field:not(.disabled-field) {
+    padding: 8px 12px !important;
+}
+
+body.is-editing-mode .editable-field.club-title-input {
+    font-size: 22px;
+    font-weight: 500;
+}
+
+/* Interactive Visibility Toggles */
+.show-on-edit { 
+    display: none !important; 
+}
+.hide-on-edit {
+    display: inline-block !important;
+}
+body.is-editing-mode .show-on-edit { 
+    display: inline-block !important; 
+}
+body.is-editing-mode .hide-on-edit { 
+    display: none !important; 
+}
+
+/* Custom Cancel Button layout */
+.btn-modern-cancel {
+    background: transparent;
+    color: #64748b;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 14px;
+    margin-right: 12px;
+    padding: 10px 14px;
+}
+.btn-modern-cancel:hover {
+    color: #0f172a;
 }

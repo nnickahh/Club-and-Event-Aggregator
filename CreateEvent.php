@@ -20,25 +20,23 @@
         $eventDate   = $_POST['eventDate'];
         $eventTime   = trim($_POST['eventTime']);
         $venue       = trim($_POST['venue']);
-        $capacity    = intval($_POST['capacity']); // Added to safely grab capacity input
+        $capacity    = intval($_POST['capacity']); 
         $description = trim($_POST['description']);
 
-        // Insert including the verified 'capacity' column details
         $stmt = $conn->prepare("INSERT INTO events (adminID, eventTitle, eventDate, eventTime, venue, capacity, description) VALUES (?, ?, ?, ?, ?, ?, ?)");
         
         if ($stmt) {
             $stmt->bind_param("sssssis", $adminID, $eventTitle, $eventDate, $eventTime, $venue, $capacity, $description);
             
             if ($stmt->execute()) {
-                // Success! Redirect straight back to your clean dashboard grid
                 header("Location: AdminDashboard.php");
                 exit();
             } else {
-                $message = "<div class='msg-error'>Error execution failure: Unable to save your event record.</div>";
+                $message = "<p class='msg-error' style='color:#ED1C24; font-weight:600;'>Error creating event. Please try again.</p>";
             }
             $stmt->close();
         } else {
-            $message = "<div class='msg-error'>Database pre-compilation query failure query error.</div>";
+            $message = "<p class='msg-error' style='color:#ED1C24; font-weight:600;'>Database preparation failed.</p>";
         }
     }
 ?>
@@ -52,51 +50,51 @@
     <link rel="stylesheet" type="text/css" href="Style.css">
 </head>
 <body>
-    
+
     <?php include 'AdminNavbar.php'; ?>
 
-    <div class="login-body" style="min-height: calc(100vh - 80px); padding: 20px 0; box-sizing: border-box;">
-        <div class="box" style="max-width: 500px; width: 100%;">
-            <h2 class="h2">Create Event</h2>
+    <div class="container">
+        <div class="profile-box">
+            <h2>Create New Event</h2>
             
             <?php echo $message; ?>
 
             <form action="CreateEvent.php" method="POST">
                 
                 <div class="form-group">
-                    <label>Event Title / Name</label>
-                    <input type="text" name="eventTitle" placeholder="e.g., INTI Badminton Championship" required>
+                    <label>Event Title :</label>
+                    <input type="text" name="eventTitle" placeholder="e.g., Annual General Meeting" required>
                 </div>
 
                 <div class="form-group">
-                    <label>Event Date</label>
+                    <label>Event Date :</label>
                     <input type="date" name="eventDate" min="<?php echo date('Y-m-d'); ?>" required>
                 </div>
 
                 <div class="form-group">
-                    <label>Event Time Schedule</label>
+                    <label>Event Time Schedule :</label>
                     <input type="text" name="eventTime" placeholder="e.g., 2:00 PM - 6:00 PM" required>
                 </div>
 
                 <div class="form-group">
-                    <label>Venue Location</label>
+                    <label>Venue Location :</label>
                     <input type="text" name="venue" placeholder="e.g., Sports Hall Block B" required>
                 </div>
 
                 <div class="form-group">
-                    <label>Max Capacity Limit</label>
+                    <label>Max Capacity Limit :</label>
                     <input type="number" name="capacity" min="1" placeholder="e.g., 50" required>
                 </div>
 
                 <div class="form-group">
-                    <label>Event Description / Remarks</label>
-                    <textarea name="description" placeholder="Provide event context guidelines or register rules..." required></textarea>
+                    <label>Event Description / Remarks :</label>
+                    <textarea name="description" placeholder="Provide event context guidelines or register rules..." required style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid var(--border, rgba(0,0,0,0.15)); border-radius: 6px; box-sizing: border-box; font-family: inherit; resize: vertical;"></textarea>
                 </div>
                 
-                <button type="submit" name="submit" class="btn-primary" style="margin-top: 10px;">Publish Event</button>
+                <button type="submit" name="submit" class="btn-primary" style="margin-top: 15px; width: 100%;">Publish Event</button>
                 
-                <div class="links center-links" style="margin-top: 20px;">
-                    Changed your mind? <a href="AdminDashboard.php" class="link-primary">Back to Dashboard</a>
+                <div style="text-align: center; margin-top: 20px; font-size: 14px; color: var(--ink-3, #888);">
+                    Changed your mind? <a href="AdminDashboard.php" style="color: var(--red, #ED1C24); text-decoration: none; font-weight: 600;">Back to Dashboard</a>
                 </div>
             </form>
         </div>

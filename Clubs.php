@@ -1,3 +1,5 @@
+<!--Clubs.php-->
+<!--User explore about all the clubs that registered-->
 <?php
     ini_set('display_errors', 1);
     error_reporting(E_ALL);
@@ -52,56 +54,56 @@
         </p>
 
         <section class="club-grid" id="clubGrid">
-        <?php
-            if ($result && $result->num_rows > 0) {
-                while ($row = $result->fetch_assoc()) {
-                    $color = $colors[$colorIndex % count($colors)];
-                    $emoji = $emojis[$colorIndex % count($emojis)];
-                    $colorIndex++;
-                    $desc = htmlspecialchars($row['description'] ?? 'No description available.');
-                    $name = htmlspecialchars($row['clubName']);
-                    // Category — use a 'category' column if it exists, else fall back to 'Club'
-                    $cat  = htmlspecialchars($row['category'] ?? 'Club');
-                    // Member count if column exists
-                    $members = isset($row['memberCount']) ? (int)$row['memberCount'] : null;
-        ?>
-            <article class="club-card"
-                     data-name="<?php echo strtolower($name); ?>"
-                     data-cat="<?php echo strtolower($cat); ?>">
+            <?php
+                if ($result && $result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        $color = $colors[$colorIndex % count($colors)];
+                        $emoji = $emojis[$colorIndex % count($emojis)];
+                        $colorIndex++;
+                        $desc = htmlspecialchars($row['description'] ?? 'No description available.');
+                        $name = htmlspecialchars($row['clubName']);
+                        // Category — use a 'category' column if it exists, else fall back to 'Club'
+                        $cat  = htmlspecialchars($row['category'] ?? 'Club');
+                        // Member count if column exists
+                        $members = isset($row['memberCount']) ? (int)$row['memberCount'] : null;
+            ?>
+                <article class="club-card"
+                        data-name="<?php echo strtolower($name); ?>"
+                        data-cat="<?php echo strtolower($cat); ?>">
 
-                <div class="club-stripe<?php echo $color ? ' ' . $color : ''; ?>"></div>
+                    <div class="club-stripe<?php echo $color ? ' ' . $color : ''; ?>"></div>
 
-                <div class="club-avatar-wrap">
-                    <div class="club-avatar<?php echo $color ? ' ' . $color : ''; ?>"><?php echo $emoji; ?></div>
-                    <div class="club-avatar-info">
-                        <h3><?php echo $name; ?></h3>
-                        <span class="club-category<?php echo $color ? ' ' . $color : ''; ?>"><?php echo $cat; ?></span>
+                    <div class="club-avatar-wrap">
+                        <div class="club-avatar<?php echo $color ? ' ' . $color : ''; ?>"><?php echo $emoji; ?></div>
+                        <div class="club-avatar-info">
+                            <h3><?php echo $name; ?></h3>
+                            <span class="club-category<?php echo $color ? ' ' . $color : ''; ?>"><?php echo $cat; ?></span>
+                        </div>
                     </div>
-                </div>
 
-                <div class="club-body">
-                    <p class="club-desc-text"><?php echo $desc; ?></p>
+                    <div class="club-body">
+                        <p class="club-desc-text"><?php echo $desc; ?></p>
 
-                    <?php if ($members !== null): ?>
-                    <div class="club-meta-row">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                        <?php echo $members; ?> members
+                        <?php if ($members !== null): ?>
+                        <div class="club-meta-row">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            <?php echo $members; ?> members
+                        </div>
+                        <?php endif; ?>
+
+                        <a href="ClubsDetails.php?id=<?php echo (int)$row['clubID']; ?>" class="btn-club-view">View Club →</a>
                     </div>
-                    <?php endif; ?>
-
-                    <a href="DetailedClub.php?id=<?php echo (int)$row['clubID']; ?>" class="btn-club-view">View Club →</a>
-                </div>
-            </article>
-        <?php
+                </article>
+            <?php
+                    }
+                } else {
+                    echo "
+                    <div class='clubs-empty'>
+                        <h3>No Clubs Registered Yet</h3>
+                        <p>There are currently no active clubs listed on our portal. Check back later!</p>
+                    </div>";
                 }
-            } else {
-                echo "
-                <div class='clubs-empty'>
-                    <h3>No Clubs Registered Yet</h3>
-                    <p>There are currently no active clubs listed on our portal. Check back later!</p>
-                </div>";
-            }
-        ?>
+            ?>
         </section>
     </main>
 

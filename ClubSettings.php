@@ -1,4 +1,3 @@
-<!--ClubSettings.php-->
 <?php
     session_start();
     require_once 'db_connect.php';
@@ -12,27 +11,22 @@
     $adminID = $_SESSION['admin_id'];
     $message = "";
 
-    // 1. Fetch authentic identity data out of admins table
-    $adminStmt = $conn->prepare("SELECT name FROM admins WHERE adminID = ?");
-    $adminStmt->bind_param("s", $adminID);
-    $adminStmt->execute();
-    $adminData = $adminStmt->get_result()->fetch_assoc();
-    $adminStmt->close();
-
-    // 2. Fetch public presentation metrics from clubs table
+    // 1. Fetch public presentation metrics from clubs table
     $clubStmt = $conn->prepare("SELECT clubName, clubEmail, description, profilePic FROM clubs WHERE adminID = ?");
     $clubStmt->bind_param("s", $adminID);
     $clubStmt->execute();
     $clubData = $clubStmt->get_result()->fetch_assoc();
     $clubStmt->close();
 
-    $clubName    = $clubData['clubName'] ?? ($_SESSION['club_name'] ?? "My Club");
-    $clubEmail   = $clubData['clubEmail'] ?? "club@inti.edu.my";
-    $description = $clubData['description'] ?? "";
-    $profilePic  = $clubData['profilePic'] ?? "";
+    // Dynamically loads the registered name from the database, or uses the session fallback if empty
+    $clubName    = !empty($clubData['clubName']) ? $clubData['clubName'] : ($_SESSION['club_name'] ?? "My Club");
+    $clubEmail   = !empty($clubData['clubEmail']) ? $clubData['clubEmail'] : "club@inti.edu.my";
+    $description = !empty($clubData['description']) ? $clubData['description'] : "";
+    $profilePic  = !empty($clubData['profilePic']) ? $clubData['profilePic'] : "";
 
-    // 3. Process form updates securely
-    if (isset($_POST['update_profile'])) {
+    // 2. Process form updates securely
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['clubName'])) {
+        $clubName    = trim($_POST['clubName']);
         $clubEmail   = trim($_POST['clubEmail']);
         $description = trim($_POST['description']);
 
@@ -52,15 +46,16 @@
             }
         }
 
-        $checkStmt = $conn->prepare("SELECT clubName FROM clubs WHERE adminID = ?");
+        // Check if row exists
+        $checkStmt = $conn->prepare("SELECT clubID FROM clubs WHERE adminID = ?");
         $checkStmt->bind_param("s", $adminID);
         $checkStmt->execute();
         $hasRecord = $checkStmt->get_result()->num_rows > 0;
         $checkStmt->close();
 
         if ($hasRecord) {
-            $updateStmt = $conn->prepare("UPDATE clubs SET clubEmail = ?, description = ?, profilePic = ? WHERE adminID = ?");
-            $updateStmt->bind_param("ssss", $clubEmail, $description, $profilePic, $adminID);
+            $updateStmt = $conn->prepare("UPDATE clubs SET clubName = ?, clubEmail = ?, description = ?, profilePic = ? WHERE adminID = ?");
+            $updateStmt->bind_param("sssss", $clubName, $clubEmail, $description, $profilePic, $adminID);
             $success = $updateStmt->execute();
             $updateStmt->close();
         } else {
@@ -72,12 +67,13 @@
 
         if ($success) {
             $message = "<div class='toast-notification success'>✨ Changes saved successfully!</div>";
+            $_SESSION['club_name'] = $clubName;
         } else {
             $message = "<div class='toast-notification error'>❌ Error processing profile adjustments.</div>";
         }
     }
 
-    // 4. Collect active tracked events sorted into Upcoming and Passed
+    // 3. Collect active tracked events
     $currentDate = date('Y-m-d');
     $eventStmt = $conn->prepare("SELECT eventID, eventTitle, eventDate, venue, eventTime FROM events WHERE adminID = ? ORDER BY eventDate ASC");
     $eventStmt->bind_param("s", $adminID);
@@ -85,17 +81,14 @@
     $eventsResult = $eventStmt->get_result();
     
     $upcomingEvents = [];
-    $pastEvents = [];
     while($ev = $eventsResult->fetch_assoc()) {
         if ($ev['eventDate'] >= $currentDate) {
             $upcomingEvents[] = $ev;
-        } else {
-            $pastEvents[] = $ev;
         }
     }
     $eventStmt->close();
 
-    // 5. Collect membership roster list
+    // 4. Collect membership roster list
     $memberQuery = "SELECT DISTINCT s.studentID, s.name, s.email 
                     FROM students s 
                     JOIN registrations r ON s.studentID = r.studentID
@@ -113,7 +106,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Club Profile - Setup Settings</title>
+    <title>Club Profile - Settings</title>
     <link rel="stylesheet" type="text/css" href="Style.css">
 </head>
 <body class="premium-dashboard">
@@ -121,41 +114,45 @@
     <?php include 'AdminNavbar.php'; ?>
 
     <main class="profile-hero-container">
-        <!-- Unified Profile Hero Header -->
-        <div class="profile-brand-card">
-            <div class="brand-identity-flex">
-                <div class="avatar-uploader-wrapper">
-                    <img src="<?php echo !empty($profilePic) ? htmlspecialchars($profilePic) : 'Image/default-club.png'; ?>" class="brand-avatar-img" alt="Club Logo">
-                    <label class="avatar-edit-overlay">
-                        📸
-                        <input type="file" name="profilePic" form="mainProfileForm" accept="image/*" onchange="document.getElementById('mainProfileForm').submit();">
-                    </label>
-                </div>
-                <div class="brand-meta-details">
-                    <span class="badge-role">OFFICIAL CLUB</span>
-                    <h2><?php echo htmlspecialchars($clubName); ?></h2>
-                    <p class="meta-subline">📍 INTI International University • Admin Workspace</p>
-                </div>
-            </div>
-            <div class="action-header-buttons">
-                <button type="submit" name="update_profile" form="mainProfileForm" class="btn-modern-primary">Save Profile Changes</button>
-            </div>
-        </div>
-
-        <?php echo $message; ?>
-
-        <!-- Segmented Tab Navigation Bar -->
-        <div class="tab-navigation-bar">
-            <button class="tab-trigger active" onclick="switchActiveTab(event, 'overview-tab')">Overview</button>
-            <button class="tab-trigger" onclick="switchActiveTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($upcomingEvents); ?></span></button>
-            <button class="tab-trigger" onclick="switchActiveTab(event, 'members-tab')">Members <span class="tab-counter"><?php echo $membersResult->num_rows; ?></span></button>
-            <button class="tab-trigger" onclick="switchActiveTab(event, 'contacts-tab')">Contacts</button>
-        </div>
-
-        <!-- FIXED Form target correctly configured to loop inside ClubSettings.php -->
+        
         <form action="ClubSettings.php" method="POST" id="mainProfileForm" enctype="multipart/form-data">
             
-            <!-- OVERVIEW TAB -->
+            <div class="profile-brand-card">
+                <div class="brand-identity-flex">
+                    <div class="avatar-uploader-wrapper">
+                        <img src="<?php echo !empty($profilePic) ? htmlspecialchars($profilePic) : 'Image/default-club.png'; ?>" class="brand-avatar-img" alt="Club Logo">
+                        <label class="avatar-edit-overlay">
+                            📸
+                            <input type="file" name="profilePic" accept="image/*" onchange="document.getElementById('mainProfileForm').submit();">
+                        </label>
+                    </div>
+                    <div class="brand-meta-details-wrapper">
+                        <span class="badge-role">OFFICIAL CLUB</span>
+                        
+                        <div class="title-field-container">
+                            <input type="text" name="clubName" id="clubNameInput" class="editable-field club-title-input" value="<?php echo htmlspecialchars($clubName); ?>" required readonly>
+                        </div>
+                        
+                        <p class="meta-subline">📍 INTI International University • Admin Workspace</p>
+                    </div>
+                </div>
+                
+                <div class="action-header-buttons">
+                    <button type="button" class="btn-modern-secondary hide-on-edit" onclick="enableProfileEditingMode()">✏️ Edit Profile</button>
+                    <button type="button" class="btn-modern-cancel show-on-edit" onclick="disableProfileEditingMode()">Cancel</button>
+                    <button type="submit" class="btn-modern-primary show-on-edit">💾 Save Changes</button>
+                </div>
+            </div>
+
+            <?php echo $message; ?>
+
+            <div class="tab-navigation-bar">
+                <button type="button" class="tab-trigger active" onclick="switchActiveTab(event, 'overview-tab')">Overview</button>
+                <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($upcomingEvents); ?></span></button>
+                <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'members-tab')">Members <span class="tab-counter"><?php echo $membersResult->num_rows; ?></span></button>
+                <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'contacts-tab')">Contacts</button>
+            </div>
+
             <div id="overview-tab" class="tab-content-panel active">
                 <div class="glass-editor-card">
                     <div class="card-title-header">
@@ -163,12 +160,11 @@
                         <p>Write a welcoming summary statement for prospective students looking to join.</p>
                     </div>
                     <div class="form-group-modern">
-                        <textarea name="description" placeholder="Type club biography, values, mission, or practice weekly schedules..."><?php echo htmlspecialchars($description); ?></textarea>
+                        <textarea name="description" id="descriptionInput" class="editable-field" placeholder="Type club biography, values, mission, or practice weekly schedules..." readonly><?php echo htmlspecialchars($description); ?></textarea>
                     </div>
                 </div>
             </div>
 
-            <!-- CONTACTS TAB -->
             <div id="contacts-tab" class="tab-content-panel">
                 <div class="glass-editor-card">
                     <div class="card-title-header">
@@ -178,20 +174,17 @@
                     <div class="form-input-grid">
                         <div class="form-group-modern">
                             <label>Official Contact Email</label>
-                            <input type="email" name="clubEmail" required value="<?php echo htmlspecialchars($clubEmail); ?>">
+                            <input type="email" name="clubEmail" id="clubEmailInput" class="editable-field text-input" required value="<?php echo htmlspecialchars($clubEmail); ?>" readonly>
                         </div>
                         <div class="form-group-modern">
                             <label>Instagram Handle</label>
-                            <input type="text" placeholder="@inti_badminton_club" value="@<?php echo strtolower(str_replace(' ', '', $clubName)); ?>">
+                            <input type="text" class="editable-field text-input disabled-field" placeholder="@inti_club" value="@<?php echo strtolower(str_replace(' ', '', $clubName)); ?>" readonly disabled>
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <input type="hidden" name="update_profile" value="1">
         </form>
 
-        <!-- EVENTS TAB -->
         <div id="events-tab" class="tab-content-panel">
             <div class="section-flex-header">
                 <h3>Ongoing & Scheduled Events</h3>
@@ -225,7 +218,6 @@
             <?php endif; ?>
         </div>
 
-        <!-- MEMBERS TAB -->
         <div id="members-tab" class="tab-content-panel">
             <div class="section-flex-header">
                 <h3>Club Membership Roster</h3>
@@ -264,7 +256,6 @@
 
     </main>
 
-    <!-- Tab Transitions Controller -->
     <script>
         function switchActiveTab(event, tabId) {
             const panels = document.querySelectorAll('.tab-content-panel');
@@ -275,6 +266,20 @@
 
             document.getElementById(tabId).classList.add('active');
             event.currentTarget.classList.add('active');
+        }
+
+        function enableProfileEditingMode() {
+            document.body.classList.add('is-editing-mode');
+            document.getElementById('clubNameInput').removeAttribute('readonly');
+            document.getElementById('descriptionInput').removeAttribute('readonly');
+            document.getElementById('clubEmailInput').removeAttribute('readonly');
+        }
+
+        function disableProfileEditingMode() {
+            document.body.classList.remove('is-editing-mode');
+            document.getElementById('clubNameInput').setAttribute('readonly', 'true');
+            document.getElementById('descriptionInput').setAttribute('readonly', 'true');
+            document.getElementById('clubEmailInput').setAttribute('readonly', 'true');
         }
     </script>
 </body>
