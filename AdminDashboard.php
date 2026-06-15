@@ -8,28 +8,33 @@
         header("Location: AdminLogin.php");
         exit();
     }
+    session_write_close();
 
     $adminID = $_SESSION['admin_id'];
     $clubName = isset($_SESSION['club_name']) ? $_SESSION['club_name'] : "Club Admin";
 
-    // FIXED QUERY: Reads safely from the events table only, avoiding missing table errors.
     $query = "SELECT * FROM events WHERE adminID = ? ORDER BY eventDate ASC";
-              
     $stmt = $conn->prepare($query);
     $stmt->bind_param("s", $adminID); 
     $stmt->execute();
     $result = $stmt->get_result();
 
-    // Sort events into arrays based on current calendar date
+    $ongoingEvents = [];
     $upcomingEvents = [];
+    $pendingEvents = [];
     $completedEvents = [];
     $currentDate = date('Y-m-d');
 
     if ($result && $result->num_rows > 0) {
         while($row = $result->fetch_assoc()) {
-            if ($row['eventDate'] >= $currentDate) {
+            $status = $row['status'] ?? 'pending';
+            if ($status === 'pending') {
+                $pendingEvents[] = $row;
+            } elseif ($status === 'approved' && $row['eventDate'] == $currentDate) {
+                $ongoingEvents[] = $row;
+            } elseif ($status === 'approved' && $row['eventDate'] > $currentDate) {
                 $upcomingEvents[] = $row;
-            } else {
+            } elseif ($status === 'approved' && $row['eventDate'] < $currentDate) {
                 $completedEvents[] = $row;
             }
         }
@@ -47,7 +52,6 @@
 </head>
 <body>
 
-    <!-- Dynamic Admin Navbar Replacement incorporating the Profile Settings dropdown hooks -->
     <?php include 'AdminNavbar.php'; ?>
 
     <main class="container">
@@ -60,21 +64,23 @@
             <a href="CreateEvent.php" class="btn-primary" style="text-decoration: none; display: inline-block;">Create New Event</a>
         </header>
 
-        <!-- ONGOING & UPCOMING EVENTS SECTION -->
-        <h3 class="section-title">Upcoming Events</h3>
+        <!-- ONGOING EVENTS SECTION -->
+        <h3 class="section-title">Ongoing Events</h3>
         <section class="event-grid">
-            <?php if (!empty($upcomingEvents)): ?>
-                <?php foreach($upcomingEvents as $event): ?>
+            <?php if (!empty($ongoingEvents)): ?>
+                <?php foreach($ongoingEvents as $event): ?>
                     <article class="event-card">
                         <div>
-                            <span class="tag tag-upcoming">Upcoming</span>
+                            <span class="mod-status-tag ongoing">Ongoing</span>
+                            <?php if (!empty($event['eventImage'])): ?>
+                                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;margin-bottom:12px;">
+                            <?php endif; ?>
                             <h3><?php echo htmlspecialchars($event['eventTitle']); ?></h3>
                             
                             <div class="event-meta">
-                                <!-- Safely displays max capacity set by the admin -->
                                 <strong>Capacity Limit:</strong> <?php echo htmlspecialchars($event['capacity']); ?> seats max<br>
                                 <strong>Date:</strong> <?php echo date('d M Y', strtotime($event['eventDate'])); ?><br>
-                                <strong>Time:</strong> <?php echo htmlspecialchars($event['eventTime']); ?><br>
+                                <strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?><br>
                                 <strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?>
                             </div>
 
@@ -82,7 +88,44 @@
                         </div>
 
                         <div class="action-buttons">
-                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-outline">Edit</a>
+                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Edit</a>
+                            <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="event-empty-box">
+                    <p>No Ongoing Events</p>
+                    <p class="empty-subtext">Events happening today will appear here.</p>
+                </div>
+            <?php endif; ?>
+        </section>
+
+        <!-- UPCOMING EVENTS SECTION -->
+        <h3 class="section-title">Upcoming Events</h3>
+        <section class="event-grid">
+            <?php if (!empty($upcomingEvents)): ?>
+                <?php foreach($upcomingEvents as $event): ?>
+                    <article class="event-card">
+                        <div>
+                            <span class="mod-status-tag upcoming">Upcoming</span>
+                            <?php if (!empty($event['eventImage'])): ?>
+                                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;margin-bottom:12px;">
+                            <?php endif; ?>
+                            <h3><?php echo htmlspecialchars($event['eventTitle']); ?></h3>
+                            
+                            <div class="event-meta">
+                                <strong>Capacity Limit:</strong> <?php echo htmlspecialchars($event['capacity']); ?> seats max<br>
+                                <strong>Date:</strong> <?php echo date('d M Y', strtotime($event['eventDate'])); ?><br>
+                                <strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?><br>
+                                <strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?>
+                            </div>
+
+                            <p class="event-desc"><?php echo htmlspecialchars($event['description']); ?></p>
+                        </div>
+
+                        <div class="action-buttons">
+                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Edit</a>
                             <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
                         </div>
                     </article>
@@ -95,6 +138,43 @@
             <?php endif; ?>
         </section>
 
+        <!-- PENDING EVENTS SECTION -->
+        <h3 class="section-title">Pending Events</h3>
+        <p style="font-size:13px;color:var(--ink-3,#888);margin:-10px 0 16px 0;">Events with a pending status are not visible to students until approved by a moderator.</p>
+        <section class="event-grid">
+            <?php if (!empty($pendingEvents)): ?>
+                <?php foreach($pendingEvents as $event): ?>
+                    <article class="event-card">
+                        <div>
+                            <span class="mod-status-tag pending">Pending Approval</span>
+                            <?php if (!empty($event['eventImage'])): ?>
+                                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;margin-bottom:12px;">
+                            <?php endif; ?>
+                            <h3><?php echo htmlspecialchars($event['eventTitle']); ?></h3>
+                            
+                            <div class="event-meta">
+                                <strong>Date:</strong> <?php echo date('d M Y', strtotime($event['eventDate'])); ?><br>
+                                <strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?><br>
+                                <strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?>
+                            </div>
+
+                            <p class="event-desc"><?php echo htmlspecialchars($event['description']); ?></p>
+                        </div>
+
+                        <div class="action-buttons">
+                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Edit</a>
+                            <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="event-empty-box">
+                    <p>No Pending Events</p>
+                    <p class="empty-subtext">All your events have been reviewed.</p>
+                </div>
+            <?php endif; ?>
+        </section>
+
         <!-- COMPLETED EVENTS SECTION -->
         <h3 class="section-title">Completed Events</h3>
         <section class="event-grid">
@@ -103,6 +183,9 @@
                     <article class="event-card event-card-completed"> 
                         <div>
                             <span class="tag">Completed</span>
+                            <?php if (!empty($event['eventImage'])): ?>
+                                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;margin-bottom:12px;opacity:0.7;">
+                            <?php endif; ?>
                             <h3><?php echo htmlspecialchars($event['eventTitle']); ?></h3>
                             
                             <div class="event-meta">

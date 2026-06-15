@@ -71,4 +71,79 @@
     } catch (mysqli_sql_exception $e) {
         error_log('DB moderator table setup error: ' . $e->getMessage());
     }
+
+    // Add `status` column to `events` table if it doesn't exist (for moderator approval workflow)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'status'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN status ENUM('pending','approved','declined') DEFAULT 'pending' AFTER description");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB events status migration error: ' . $e->getMessage());
+    }
+
+    // Add `eventImage` column to `events` table if it doesn't exist (for event picture upload)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'eventImage'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN eventImage VARCHAR(255) DEFAULT NULL AFTER description");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB eventImage migration error: ' . $e->getMessage());
+    }
+
+    // Add `eventEndTime` column to `events` table (for event end time)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'eventEndTime'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN eventEndTime TIME DEFAULT NULL AFTER eventTime");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB eventEndTime migration error: ' . $e->getMessage());
+    }
+
+    // Add `socialMedia` column to `clubs` table if it doesn't exist (for club social links)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM clubs LIKE 'socialMedia'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE clubs ADD COLUMN socialMedia TEXT DEFAULT NULL AFTER description");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB socialMedia migration error: ' . $e->getMessage());
+    }
+
+    // Ensure the `club_members` table exists
+    try {
+        $check = $conn->query("SHOW TABLES LIKE 'club_members'");
+        if (!$check || $check->num_rows === 0) {
+            $create_sql = "CREATE TABLE IF NOT EXISTS club_members (
+              id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              studentID VARCHAR(20) NOT NULL,
+              adminID VARCHAR(20) NOT NULL,
+              role VARCHAR(50) DEFAULT 'member',
+              joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE KEY unique_member (studentID, adminID)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $conn->query($create_sql);
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB club_members table creation error: ' . $e->getMessage());
+    }
+
+    // Ensure the `notifications` table exists
+    try {
+        $check = $conn->query("SHOW TABLES LIKE 'notifications'");
+        if (!$check || $check->num_rows === 0) {
+            $create_sql = "CREATE TABLE IF NOT EXISTS notifications (
+              id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              adminID VARCHAR(20) NOT NULL,
+              message VARCHAR(500) NOT NULL,
+              is_read TINYINT(1) DEFAULT 0,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $conn->query($create_sql);
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB notifications table creation error: ' . $e->getMessage());
+    }
 ?>

@@ -37,6 +37,8 @@
                         $_SESSION['moderator_id'] = $row['moderatorID'];
                         $_SESSION['full_name'] = $row['name'];
                         $_SESSION['role'] = 'moderator';
+                        session_regenerate_id(true);
+                        session_write_close();
                         
                         // Redirect to the Moderator Dashboard
                         header("Location: ModeratorDashboard.php");

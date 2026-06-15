@@ -7,6 +7,7 @@
         header("Location: AdminLogin.php");
         exit();
     }
+    session_write_close();
 
     $admin_id = $_SESSION['admin_id'];
 
@@ -99,7 +100,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Profile Settings</title>
+    <title>Admin Profile</title>
     <link rel="stylesheet" href="Style.css">
 </head>
 <body>

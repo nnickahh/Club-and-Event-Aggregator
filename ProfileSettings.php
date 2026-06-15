@@ -7,6 +7,7 @@
         header("Location: StudentLogin.php");
         exit();
     }
+    session_write_close();
 
     $student_id = $_SESSION['student_id'];
 
@@ -65,14 +66,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Account Settings</title>
+    <title>Account Profile</title>
     <link rel="stylesheet" type="text/css" href="Style.css">
 </head>
 <body>
     <?php include 'StudentNavbar.php'; ?>
     
     <main class="container">
-        <h2 class="page-title-spaced">Account & Profile Settings</h2>
+        <h2 class="page-title-spaced">Account Profile</h2>
         
         <div class="settings-card">
             

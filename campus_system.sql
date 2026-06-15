@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: May 26, 2026 at 05:50 AM
+-- Generation Time: Jun 15, 2026 at 07:48 AM
 -- Server version: 10.4.21-MariaDB
 -- PHP Version: 7.4.29
 
@@ -37,6 +37,36 @@ CREATE TABLE `admins` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--
+-- Dumping data for table `admins`
+--
+
+INSERT INTO `admins` (`adminID`, `name`, `clubName`, `clubEmail`, `password`, `status`, `created_at`) VALUES
+('B11', 'alibaba', 'IICP Chirstian', 'baba@gmail.com', '$2y$10$vaCUjBfUn/m4BW1ftQxxOuw/fZJldMH6Y/RdJm3c7HWQ48Fet44my', 'active', '2026-06-09 06:08:03');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `clubs`
+--
+
+CREATE TABLE `clubs` (
+  `clubID` int(10) UNSIGNED NOT NULL,
+  `clubName` varchar(255) NOT NULL,
+  `clubEmail` varchar(255) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `profilePic` varchar(255) DEFAULT NULL,
+  `adminID` varchar(50) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Dumping data for table `clubs`
+--
+
+INSERT INTO `clubs` (`clubID`, `clubName`, `clubEmail`, `description`, `profilePic`, `adminID`, `created_at`) VALUES
+(1, 'IICP Christian', 'club@inti.edu.my', '', '', 'B11', '2026-06-09 16:27:33');
+
 -- --------------------------------------------------------
 
 --
@@ -50,9 +80,33 @@ CREATE TABLE `events` (
   `eventDate` date NOT NULL,
   `eventTime` time NOT NULL,
   `venue` varchar(100) NOT NULL,
+  `capacity` int(20) NOT NULL,
   `description` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `adminID` varchar(20) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `moderators`
+--
+
+CREATE TABLE `moderators` (
+  `moderatorID` int(10) UNSIGNED NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Dumping data for table `moderators`
+--
+
+INSERT INTO `moderators` (`moderatorID`, `name`, `email`, `password`, `status`, `created_at`) VALUES
+(12, 'elin', 'e@gmail.com', '12345', 'active', '2026-06-08 02:38:52');
 
 -- --------------------------------------------------------
 
@@ -86,8 +140,8 @@ CREATE TABLE `students` (
 --
 
 INSERT INTO `students` (`studentID`, `name`, `email`, `password`, `created_at`) VALUES
-('P24016336', 'Elin Khaw', 'P24016336@student.newinti.edu.my', '$2y$10$29HOT93VUHZfOV.2fipr.O7OOZtHbHpki8wNw58OyGyzLjOlAUi1G', '2026-05-11 13:59:19'),
-('P24016435', 'Khaw Ee Lynn, Elin', 'p24016435@student.newinti.edu.my', '$2y$10$LYwZdT0ihzeTt9Bfpp4PPOq8325yUsxu06pXp.pZw4i9SDA83p0NC', '2026-05-19 05:41:41');
+('P111111', 'abc', 'abc@gmail.com', '$2y$10$2KEKqkTGL9g1.R5kUJzfiO9QyInPg0ZqoR1Oy6x3Rc4M87iTKRxzu', '2026-06-09 01:15:39'),
+('P1233', 'hi', 'hi@gmail.com', '$2y$10$O7VH.x3t40mllQzLxhQblOO8LG1TR6/63be7WjjI6666kXq17qM6e', '2026-06-08 08:21:39');
 
 --
 -- Indexes for dumped tables
@@ -101,10 +155,25 @@ ALTER TABLE `admins`
   ADD UNIQUE KEY `clubEmail` (`clubEmail`);
 
 --
+-- Indexes for table `clubs`
+--
+ALTER TABLE `clubs`
+  ADD PRIMARY KEY (`clubID`),
+  ADD KEY `fk_club_admin` (`adminID`);
+
+--
 -- Indexes for table `events`
 --
 ALTER TABLE `events`
-  ADD PRIMARY KEY (`eventID`);
+  ADD PRIMARY KEY (`eventID`),
+  ADD KEY `adminID` (`adminID`);
+
+--
+-- Indexes for table `moderators`
+--
+ALTER TABLE `moderators`
+  ADD PRIMARY KEY (`moderatorID`),
+  ADD UNIQUE KEY `email` (`email`);
 
 --
 -- Indexes for table `registrations`
@@ -126,10 +195,22 @@ ALTER TABLE `students`
 --
 
 --
+-- AUTO_INCREMENT for table `clubs`
+--
+ALTER TABLE `clubs`
+  MODIFY `clubID` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
 -- AUTO_INCREMENT for table `events`
 --
 ALTER TABLE `events`
   MODIFY `eventID` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `moderators`
+--
+ALTER TABLE `moderators`
+  MODIFY `moderatorID` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `registrations`
@@ -140,6 +221,18 @@ ALTER TABLE `registrations`
 --
 -- Constraints for dumped tables
 --
+
+--
+-- Constraints for table `clubs`
+--
+ALTER TABLE `clubs`
+  ADD CONSTRAINT `fk_club_admin` FOREIGN KEY (`adminID`) REFERENCES `admins` (`adminID`);
+
+--
+-- Constraints for table `events`
+--
+ALTER TABLE `events`
+  ADD CONSTRAINT `events_ibfk_1` FOREIGN KEY (`adminID`) REFERENCES `admins` (`adminID`);
 
 --
 -- Constraints for table `registrations`

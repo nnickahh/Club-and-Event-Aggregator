@@ -20,9 +20,9 @@
         header("Location: StudentLogin.php");
         exit();
     }
+    session_write_close();
 
-    if ($_SERVER["REQUEST_METHOD"] == "POST") {
-        $student_id = $_SESSION['student_id'];
+    $student_id = $_SESSION['student_id'];
         $current_password = $_POST['current_password'];
         $new_password = $_POST['new_password'];
         $confirm_password = $_POST['confirm_password'];

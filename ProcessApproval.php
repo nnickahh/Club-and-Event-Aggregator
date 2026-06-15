@@ -7,6 +7,7 @@
         header("Location: ModeratorLogin.php");
         exit();
     }
+    session_write_close();
 
     $statusUpdated = false;
     $displayAction = ""; 

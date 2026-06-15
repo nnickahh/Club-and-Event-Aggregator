@@ -7,6 +7,7 @@
         header("Location: StudentLogin.php");
         exit();
     }
+    session_write_close();
 ?>
 <!DOCTYPE html>
 <html lang="en">

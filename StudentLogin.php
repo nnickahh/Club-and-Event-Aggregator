@@ -36,6 +36,8 @@
                     $_SESSION['student_id'] = $row['studentID'];
                     $_SESSION['full_name'] = $row['name'];
                     $_SESSION['role'] = 'student';
+                    session_regenerate_id(true);
+                    session_write_close();
                     
                     // Redirect them to the student dashboard
                     header("Location: StudentDashboard.php");

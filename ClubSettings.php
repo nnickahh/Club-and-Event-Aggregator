@@ -7,12 +7,13 @@
         header("Location: AdminLogin.php");
         exit();
     }
+    session_write_close();
 
     $adminID = $_SESSION['admin_id'];
     $message = "";
 
     // 1. Fetch public presentation metrics from clubs table
-    $clubStmt = $conn->prepare("SELECT clubName, clubEmail, description, profilePic FROM clubs WHERE adminID = ?");
+    $clubStmt = $conn->prepare("SELECT clubName, clubEmail, description, profilePic, socialMedia FROM clubs WHERE adminID = ?");
     $clubStmt->bind_param("s", $adminID);
     $clubStmt->execute();
     $clubData = $clubStmt->get_result()->fetch_assoc();
@@ -23,27 +24,49 @@
     $clubEmail   = !empty($clubData['clubEmail']) ? $clubData['clubEmail'] : "club@inti.edu.my";
     $description = !empty($clubData['description']) ? $clubData['description'] : "";
     $profilePic  = !empty($clubData['profilePic']) ? $clubData['profilePic'] : "";
+    $socialMedia = !empty($clubData['socialMedia']) ? $clubData['socialMedia'] : "";
 
     // 2. Process form updates securely
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['clubName'])) {
         $clubName    = trim($_POST['clubName']);
         $clubEmail   = trim($_POST['clubEmail']);
         $description = trim($_POST['description']);
+        $socialMedia = trim($_POST['socialMedia'] ?? '');
 
         if (isset($_FILES['profilePic']) && $_FILES['profilePic']['error'] == 0) {
-            $allowed = ['jpg', 'jpeg', 'png', 'gif'];
+            $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
             $filename = $_FILES['profilePic']['name'];
             $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
             if (in_array($ext, $allowed)) {
-                $newName = "uploads/club_" . $adminID . "_" . time() . "." . $ext;
-                if (!is_dir('uploads')) {
-                    mkdir('uploads', 0777, true);
+                $uploadDir = "uploads/";
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0777, true);
                 }
+                $newName = $uploadDir . "club_" . $adminID . "_" . time() . "." . $ext;
                 if (move_uploaded_file($_FILES['profilePic']['tmp_name'], $newName)) {
+                    // Delete old profile pic if not default
+                    if (!empty($profilePic) && strpos($profilePic, 'default') === false && file_exists($profilePic)) {
+                        @unlink($profilePic);
+                    }
                     $profilePic = $newName;
+                } else {
+                    $message = "<div class='toast-notification error'>❌ Failed to move uploaded file. Check directory permissions.</div>";
                 }
+            } else {
+                $message = "<div class='toast-notification error'>❌ Invalid file type. Allowed: " . implode(', ', $allowed) . "</div>";
             }
+        } elseif (isset($_FILES['profilePic']) && $_FILES['profilePic']['error'] != 4) {
+            $uploadErrors = [
+                1 => 'File exceeds server upload_max_filesize',
+                2 => 'File exceeds form MAX_FILE_SIZE',
+                3 => 'File was only partially uploaded',
+                6 => 'Missing temporary folder',
+                7 => 'Failed to write file to disk',
+                8 => 'File upload stopped by extension'
+            ];
+            $errMsg = $uploadErrors[$_FILES['profilePic']['error']] ?? 'Unknown error (' . $_FILES['profilePic']['error'] . ')';
+            $message = "<div class='toast-notification error'>❌ Upload error: $errMsg</div>";
         }
 
         // Check if row exists
@@ -54,13 +77,13 @@
         $checkStmt->close();
 
         if ($hasRecord) {
-            $updateStmt = $conn->prepare("UPDATE clubs SET clubName = ?, clubEmail = ?, description = ?, profilePic = ? WHERE adminID = ?");
-            $updateStmt->bind_param("sssss", $clubName, $clubEmail, $description, $profilePic, $adminID);
+            $updateStmt = $conn->prepare("UPDATE clubs SET clubName = ?, clubEmail = ?, description = ?, profilePic = ?, socialMedia = ? WHERE adminID = ?");
+            $updateStmt->bind_param("ssssss", $clubName, $clubEmail, $description, $profilePic, $socialMedia, $adminID);
             $success = $updateStmt->execute();
             $updateStmt->close();
         } else {
-            $insertStmt = $conn->prepare("INSERT INTO clubs (clubName, clubEmail, description, profilePic, adminID) VALUES (?, ?, ?, ?, ?)");
-            $insertStmt->bind_param("sssss", $clubName, $clubEmail, $description, $profilePic, $adminID);
+            $insertStmt = $conn->prepare("INSERT INTO clubs (clubName, clubEmail, description, profilePic, socialMedia, adminID) VALUES (?, ?, ?, ?, ?, ?)");
+            $insertStmt->bind_param("ssssss", $clubName, $clubEmail, $description, $profilePic, $socialMedia, $adminID);
             $success = $insertStmt->execute();
             $insertStmt->close();
         }
@@ -75,30 +98,52 @@
 
     // 3. Collect active tracked events
     $currentDate = date('Y-m-d');
-    $eventStmt = $conn->prepare("SELECT eventID, eventTitle, eventDate, venue, eventTime FROM events WHERE adminID = ? ORDER BY eventDate ASC");
+    $eventStmt = $conn->prepare("SELECT eventID, eventTitle, eventDate, venue, eventTime, eventEndTime FROM events WHERE adminID = ? ORDER BY eventDate ASC");
     $eventStmt->bind_param("s", $adminID);
     $eventStmt->execute();
     $eventsResult = $eventStmt->get_result();
     
+    $ongoingEvents = [];
     $upcomingEvents = [];
     while($ev = $eventsResult->fetch_assoc()) {
-        if ($ev['eventDate'] >= $currentDate) {
+        if ($ev['eventDate'] == $currentDate) {
+            $ongoingEvents[] = $ev;
+        } elseif ($ev['eventDate'] > $currentDate) {
             $upcomingEvents[] = $ev;
         }
     }
     $eventStmt->close();
 
-    // 4. Collect membership roster list
-    $memberQuery = "SELECT DISTINCT s.studentID, s.name, s.email 
-                    FROM students s 
-                    JOIN registrations r ON s.studentID = r.studentID
-                    JOIN events e ON r.eventID = e.eventID
-                    WHERE e.adminID = ?";
+    // 4. Collect membership roster list with roles
+    $memberQuery = "SELECT cm.studentID, cm.role, s.name, s.email
+                    FROM club_members cm
+                    JOIN students s ON cm.studentID = s.studentID
+                    WHERE cm.adminID = ?
+                    ORDER BY cm.joined_at ASC";
     $memberStmt = $conn->prepare($memberQuery);
     $memberStmt->bind_param("s", $adminID);
     $memberStmt->execute();
     $membersResult = $memberStmt->get_result();
     $memberStmt->close();
+
+    // Handle role update
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_role'])) {
+        $targetStudent = $_POST['student_id'];
+        $newRole = trim($_POST['role']);
+        if (!empty($targetStudent) && !empty($newRole)) {
+            $updateStmt = $conn->prepare("UPDATE club_members SET role = ? WHERE studentID = ? AND adminID = ?");
+            $updateStmt->bind_param("sss", $newRole, $targetStudent, $adminID);
+            $updateStmt->execute();
+            $updateStmt->close();
+            echo "<div class='toast-notification success'>✅ Role updated successfully!</div>";
+            // Refresh the roster
+            $memberStmt = $conn->prepare($memberQuery);
+            $memberStmt->bind_param("s", $adminID);
+            $memberStmt->execute();
+            $membersResult = $memberStmt->get_result();
+            $memberStmt->close();
+        }
+    }
 ?>
 
 <!DOCTYPE html>
@@ -106,10 +151,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Club Profile - Settings</title>
+    <title>Club Profile</title>
     <link rel="stylesheet" type="text/css" href="Style.css">
 </head>
-<body class="premium-dashboard">
+<body>
 
     <?php include 'AdminNavbar.php'; ?>
 
@@ -120,11 +165,9 @@
             <div class="profile-brand-card">
                 <div class="brand-identity-flex">
                     <div class="avatar-uploader-wrapper">
-                        <img src="<?php echo !empty($profilePic) ? htmlspecialchars($profilePic) : 'Image/default-club.png'; ?>" class="brand-avatar-img" alt="Club Logo">
-                        <label class="avatar-edit-overlay">
-                            📸
-                            <input type="file" name="profilePic" accept="image/*" onchange="document.getElementById('mainProfileForm').submit();">
-                        </label>
+                        <img src="<?php echo !empty($profilePic) ? htmlspecialchars($profilePic) . '?t=' . time() : 'Image/default-club.png'; ?>" class="brand-avatar-img" alt="Club Logo" onclick="openAvatarViewer(this.src)" style="cursor:pointer;">
+                        <label class="avatar-edit-overlay" for="profilePicInput">📸</label>
+                        <input type="file" name="profilePic" id="profilePicInput" accept="image/*" style="display:none;">
                     </div>
                     <div class="brand-meta-details-wrapper">
                         <span class="badge-role">OFFICIAL CLUB</span>
@@ -148,7 +191,7 @@
 
             <div class="tab-navigation-bar">
                 <button type="button" class="tab-trigger active" onclick="switchActiveTab(event, 'overview-tab')">Overview</button>
-                <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($upcomingEvents); ?></span></button>
+                <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($ongoingEvents) + count($upcomingEvents); ?></span></button>
                 <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'members-tab')">Members <span class="tab-counter"><?php echo $membersResult->num_rows; ?></span></button>
                 <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'contacts-tab')">Contacts</button>
             </div>
@@ -177,8 +220,8 @@
                             <input type="email" name="clubEmail" id="clubEmailInput" class="editable-field text-input" required value="<?php echo htmlspecialchars($clubEmail); ?>" readonly>
                         </div>
                         <div class="form-group-modern">
-                            <label>Instagram Handle</label>
-                            <input type="text" class="editable-field text-input disabled-field" placeholder="@inti_club" value="@<?php echo strtolower(str_replace(' ', '', $clubName)); ?>" readonly disabled>
+                            <label>Social Media & Other Contacts</label>
+                            <textarea name="socialMedia" id="socialMediaInput" class="editable-field" placeholder="Instagram: @yourclub&#10;Facebook: /yourclub&#10;Website: https://..." readonly><?php echo htmlspecialchars($socialMedia ?? ''); ?></textarea>
                         </div>
                     </div>
                 </div>
@@ -187,11 +230,36 @@
 
         <div id="events-tab" class="tab-content-panel">
             <div class="section-flex-header">
-                <h3>Ongoing & Scheduled Events</h3>
                 <a href="CreateEvent.php" class="btn-modern-secondary">+ New Event</a>
             </div>
-            
+
+            <?php if (!empty($ongoingEvents)): ?>
+                <div class="section-flex-header">
+                    <h3>Ongoing Events</h3>
+                </div>
+                <div class="modern-events-list">
+                    <?php foreach($ongoingEvents as $ev): ?>
+                        <div class="event-strip-card">
+                            <div class="date-badge-box">
+                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                            </div>
+                            <div class="strip-main-info">
+                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
+                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
+                            </div>
+                            <div class="strip-actions">
+                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Edit</a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
             <?php if (!empty($upcomingEvents)): ?>
+                <div class="section-flex-header" style="<?php echo !empty($ongoingEvents) ? 'margin-top:24px;' : ''; ?>">
+                    <h3>Upcoming Events</h3>
+                </div>
                 <div class="modern-events-list">
                     <?php foreach($upcomingEvents as $ev): ?>
                         <div class="event-strip-card">
@@ -201,7 +269,7 @@
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
-                                <p class="strip-meta">⏰ <?php echo htmlspecialchars($ev['eventTime']); ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
+                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
                             </div>
                             <div class="strip-actions">
                                 <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Edit</a>
@@ -209,7 +277,9 @@
                         </div>
                     <?php endforeach; ?>
                 </div>
-            <?php else: ?>
+            <?php endif; ?>
+
+            <?php if (empty($ongoingEvents) && empty($upcomingEvents)): ?>
                 <div class="empty-state-canvas">
                     <div class="empty-icon">📅</div>
                     <h4>No active ongoing events</h4>
@@ -220,8 +290,7 @@
 
         <div id="members-tab" class="tab-content-panel">
             <div class="section-flex-header">
-                <h3>Club Membership Roster</h3>
-                <button class="btn-modern-secondary" onclick="window.print()">Export List</button>
+                <h3>Club Members (<?php echo $membersResult->num_rows; ?>)</h3>
             </div>
 
             <?php if ($membersResult->num_rows > 0): ?>
@@ -229,17 +298,34 @@
                     <table class="premium-modern-table">
                         <thead>
                             <tr>
+                                <th>No.</th>
                                 <th>Student ID</th>
                                 <th>Full Name</th>
                                 <th>Official Email Address</th>
+                                <th>Role</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php while($memb = $membersResult->fetch_assoc()): ?>
+                            <?php $i = 1; while($memb = $membersResult->fetch_assoc()): ?>
                                 <tr>
+                                    <td><?php echo $i++; ?></td>
                                     <td><span class="id-tag"><?php echo htmlspecialchars($memb['studentID']); ?></span></td>
                                     <td class="user-cell-name"><strong><?php echo htmlspecialchars($memb['name']); ?></strong></td>
                                     <td><a href="mailto:<?php echo htmlspecialchars($memb['email']); ?>" class="email-link"><?php echo htmlspecialchars($memb['email']); ?></a></td>
+                                    <td>
+                                        <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:<?php echo $memb['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $memb['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
+                                            <?php echo htmlspecialchars($memb['role']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form method="POST" class="role-input-form" onsubmit="return confirm('Update role for <?php echo htmlspecialchars($memb['studentID']); ?>?');">
+                                            <input type="hidden" name="update_role" value="1">
+                                            <input type="hidden" name="student_id" value="<?php echo htmlspecialchars($memb['studentID']); ?>">
+                                            <input type="text" name="role" value="<?php echo htmlspecialchars($memb['role']); ?>" placeholder="Enter role">
+                                            <button type="submit">Set</button>
+                                        </form>
+                                    </td>
                                 </tr>
                             <?php endwhile; ?>
                         </tbody>
@@ -255,6 +341,12 @@
         </div>
 
     </main>
+
+    <!-- Avatar viewer modal -->
+    <div id="avatarViewer" class="avatar-viewer-modal" onclick="closeAvatarViewer()">
+        <span class="avatar-viewer-close">&times;</span>
+        <img class="avatar-viewer-image" id="avatarViewerImage" alt="Enlarged club logo">
+    </div>
 
     <script>
         function switchActiveTab(event, tabId) {
@@ -273,6 +365,7 @@
             document.getElementById('clubNameInput').removeAttribute('readonly');
             document.getElementById('descriptionInput').removeAttribute('readonly');
             document.getElementById('clubEmailInput').removeAttribute('readonly');
+            document.getElementById('socialMediaInput').removeAttribute('readonly');
         }
 
         function disableProfileEditingMode() {
@@ -280,7 +373,21 @@
             document.getElementById('clubNameInput').setAttribute('readonly', 'true');
             document.getElementById('descriptionInput').setAttribute('readonly', 'true');
             document.getElementById('clubEmailInput').setAttribute('readonly', 'true');
+            document.getElementById('socialMediaInput').setAttribute('readonly', 'true');
         }
+
+        function openAvatarViewer(src) {
+            document.getElementById('avatarViewerImage').src = src;
+            document.getElementById('avatarViewer').classList.add('active');
+        }
+
+        function closeAvatarViewer() {
+            document.getElementById('avatarViewer').classList.remove('active');
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeAvatarViewer();
+        });
     </script>
 </body>
 </html>

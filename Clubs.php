@@ -11,6 +11,24 @@
         header("Location: StudentLogin.php");
         exit();
     }
+    session_write_close();
+
+    $studentID = $_SESSION['student_id'];
+
+    // Get club names the student is a member of
+    $memberClubNames = [];
+    try {
+        $memberStmt = $conn->prepare("SELECT a.clubName FROM club_members cm JOIN admins a ON cm.adminID = a.adminID WHERE cm.studentID = ?");
+        $memberStmt->bind_param("s", $studentID);
+        $memberStmt->execute();
+        $memberResult = $memberStmt->get_result();
+        while ($m = $memberResult->fetch_assoc()) {
+            $memberClubNames[] = strtolower(trim($m['clubName']));
+        }
+        $memberStmt->close();
+    } catch (mysqli_sql_exception $e) {
+        error_log('Clubs.php membership query error: ' . $e->getMessage());
+    }
 
     try {
         $query = "SELECT * FROM clubs ORDER BY clubName ASC";
@@ -40,10 +58,17 @@
     <main class="container">
         <h2 class="clubs-title">Explore Campus Clubs</h2>
 
-        <!-- Search bar (reuses existing search-wrap style) -->
-        <div class="search-wrap" style="margin-bottom:22px;">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="clubSearch" class="search-bar" placeholder="Search clubs by name or category...">
+        <!-- Toolbar: search + filter -->
+        <div class="search-toolbar" style="margin-bottom:22px;">
+            <div class="search-wrap">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="clubSearch" class="search-bar" placeholder="Search clubs by name or category...">
+            </div>
+            <div class="reg-filter-group">
+                <button class="filter-chip active" data-memberfilter="all">All</button>
+                <button class="filter-chip" data-memberfilter="member">Member</button>
+                <button class="filter-chip" data-memberfilter="nonmember">Non-member</button>
+            </div>
         </div>
 
         <p class="section-label" id="clubCount">
@@ -67,14 +92,20 @@
                         // Member count if column exists
                         $members = isset($row['memberCount']) ? (int)$row['memberCount'] : null;
             ?>
+                <?php $isMember = in_array(strtolower(trim($name)), $memberClubNames); ?>
                 <article class="club-card"
                         data-name="<?php echo strtolower($name); ?>"
-                        data-cat="<?php echo strtolower($cat); ?>">
+                        data-cat="<?php echo strtolower($cat); ?>"
+                        data-member="<?php echo $isMember ? '1' : '0'; ?>">
 
                     <div class="club-stripe<?php echo $color ? ' ' . $color : ''; ?>"></div>
 
                     <div class="club-avatar-wrap">
-                        <div class="club-avatar<?php echo $color ? ' ' . $color : ''; ?>"><?php echo $emoji; ?></div>
+                        <?php if (!empty($row['profilePic'])): ?>
+                            <img src="<?php echo htmlspecialchars($row['profilePic']); ?>" class="club-avatar-img" alt="<?php echo $name; ?>">
+                        <?php else: ?>
+                            <div class="club-avatar<?php echo $color ? ' ' . $color : ''; ?>"><?php echo $emoji; ?></div>
+                        <?php endif; ?>
                         <div class="club-avatar-info">
                             <h3><?php echo $name; ?></h3>
                             <span class="club-category<?php echo $color ? ' ' . $color : ''; ?>"><?php echo $cat; ?></span>
@@ -112,17 +143,30 @@
         const clubCount   = document.getElementById('clubCount');
         const cards       = document.querySelectorAll('.club-card');
 
-        searchInput.addEventListener('input', function () {
-            const q = this.value.toLowerCase().trim();
+        function applyClubFilters() {
+            const q = searchInput.value.toLowerCase().trim();
+            const memberFilter = document.querySelector('.reg-filter-group .filter-chip.active');
+            const mVal = memberFilter ? memberFilter.dataset.memberfilter : 'all';
             let visible = 0;
             cards.forEach(card => {
-                const match = !q
-                    || card.dataset.name.includes(q)
-                    || card.dataset.cat.includes(q);
-                card.style.display = match ? '' : 'none';
-                if (match) visible++;
+                let show = true;
+                if (q && !card.dataset.name.includes(q) && !card.dataset.cat.includes(q)) show = false;
+                if (mVal === 'member' && card.dataset.member !== '1') show = false;
+                if (mVal === 'nonmember' && card.dataset.member !== '0') show = false;
+                card.style.display = show ? '' : 'none';
+                if (show) visible++;
             });
             clubCount.textContent = visible + ' club' + (visible !== 1 ? 's' : '') + ' found';
+        }
+
+        searchInput.addEventListener('input', applyClubFilters);
+
+        document.querySelectorAll('.reg-filter-group .filter-chip').forEach(btn => {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('.reg-filter-group .filter-chip').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                applyClubFilters();
+            });
         });
     </script>
 </body>

@@ -1,273 +1,216 @@
 // calendar.js
-
 let currentDate = new Date();
 let currentView = 'month';
 
-const monthNames = ["January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
-];
+const monthNames    = ["January","February","March","April","May","June",
+                       "July","August","September","October","November","December"];
+const dayNamesShort = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const colorPalette  = ['red','green','blue','amber','purple'];
+function clubColor(clubName) {
+    let h = 0;
+    const s = (clubName || '').toLowerCase();
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i);
+    return colorPalette[Math.abs(h) % colorPalette.length];
+}
 
-const dayNamesShort = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const colorPalette  = ['red', 'green', 'blue', 'amber', 'purple'];
-
-// ─── Fetch Events ──────────────────────────────────────────────────────────
+// ─── Fetch ─────────────────────────────────────────────────────────────────
 async function fetchEvents() {
-    try {
-        const response = await fetch('get_events.php');
-        return await response.json();
-    } catch (error) {
-        console.error("Error fetching events:", error);
-        return [];
-    }
+    try { return await (await fetch('get_events.php')).json(); }
+    catch(e) { console.error(e); return []; }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function pad(n) { return String(n).padStart(2,'0'); }
+function toDs(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function esc(s) {
+    if (!s) return '';
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+// Convert hour integer to 12-hour AM/PM label
+function ampm(h) {
+    if (h === 0)  return '12 AM';
+    if (h === 12) return '12 PM';
+    return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+function getWeekStart(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+    d.setHours(0,0,0,0);
+    return d;
+}
+function positionNowLine() {
+    const line = document.getElementById('nowLine');
+    if (!line) return;
+    const now = new Date();
+    const HOUR_H = 56, START_H = 0;
+    line.style.top = `${((now.getHours() - START_H) + now.getMinutes()/60) * HOUR_H}px`;
 }
 
 // ─── MONTH VIEW ────────────────────────────────────────────────────────────
 async function renderMonthView() {
     const month = currentDate.getMonth();
     const year  = currentDate.getFullYear();
-
     document.getElementById('monthYearDisplay').innerText = `${monthNames[month]} ${year}`;
 
-    const dbEvents = await fetchEvents();
-    const calendarGrid = document.getElementById('mainCalendar');
+    const events = await fetchEvents();
+    const grid   = document.getElementById('mainCalendar');
+    grid.className = 'calendar-grid';
+    grid.innerHTML = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+        .map(d => `<div class="day-name">${d}</div>`).join('');
 
-    calendarGrid.className = 'calendar-grid';
-    calendarGrid.innerHTML = `
-        <div class="day-name">Mon</div>
-        <div class="day-name">Tue</div>
-        <div class="day-name">Wed</div>
-        <div class="day-name">Thu</div>
-        <div class="day-name">Fri</div>
-        <div class="day-name">Sat</div>
-        <div class="day-name">Sun</div>
-    `;
-
-    const firstDayOfWeek = new Date(year, month, 1).getDay();
-    const emptyBoxesBefore = (firstDayOfWeek === 0) ? 6 : firstDayOfWeek - 1;
+    const firstDay    = new Date(year, month, 1).getDay();
+    const emptyBefore = firstDay === 0 ? 6 : firstDay - 1;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const realToday = new Date();
+    const today       = new Date();
 
-    for (let i = 0; i < emptyBoxesBefore; i++) {
-        calendarGrid.innerHTML += `<div class="calendar-day empty-day"></div>`;
-    }
+    for (let i = 0; i < emptyBefore; i++)
+        grid.innerHTML += `<div class="calendar-day empty-day"></div>`;
 
-    let colorIndex = 0;
     for (let day = 1; day <= daysInMonth; day++) {
-        let highlightClass = "";
-        if (day === realToday.getDate() &&
-            month === realToday.getMonth() &&
-            year === realToday.getFullYear()) {
-            highlightClass = " today-highlight";
-        }
-
-        const currentDayString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-        let dailyEventsHtml = "";
-        dbEvents.forEach(event => {
-            if (event.eventDate === currentDayString) {
-                const color = colorPalette[colorIndex % colorPalette.length];
-                colorIndex++;
-                dailyEventsHtml += `<div class="calendar-event-pill" data-color="${color}" title="${event.eventTitle}">${event.eventTitle}</div>`;
+        const ds      = `${year}-${pad(month+1)}-${pad(day)}`;
+        const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+        let evHtml = '';
+        events.forEach(ev => {
+            if (ev.eventDate === ds) {
+                const c = clubColor(ev.clubName);
+                evHtml += `<a href="DetailedEvent.php?id=${ev.eventID}" style="text-decoration:none;color:inherit;display:block;"><div class="calendar-event-pill" data-color="${c}" title="${ev.eventTitle}">${ev.eventTitle}</div></a>`;
             }
         });
-
-        calendarGrid.innerHTML += `
-            <div class="calendar-day${highlightClass}">
+        grid.innerHTML += `
+            <div class="calendar-day${isToday ? ' today-highlight' : ''}">
                 <span class="day-number">${day}</span>
-                <div class="event-list-container">${dailyEventsHtml}</div>
+                <div class="event-list-container">${evHtml}</div>
             </div>`;
     }
 }
 
 // ─── WEEK VIEW ─────────────────────────────────────────────────────────────
 async function renderWeekView() {
-    const dbEvents = await fetchEvents();
-
+    const events    = await fetchEvents();
     const weekStart = getWeekStart(currentDate);
     const weekEnd   = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
 
-    const fmt = (d) => `${d.getDate()} ${monthNames[d.getMonth()].slice(0, 3)}`;
+    const fmt = d => `${d.getDate()} ${monthNames[d.getMonth()].slice(0,3)}`;
     document.getElementById('monthYearDisplay').innerText =
-        `${fmt(weekStart)} – ${fmt(weekEnd)} ${weekEnd.getFullYear()}`;
+        `${fmt(weekStart)} \u2013 ${fmt(weekEnd)} ${weekEnd.getFullYear()}`;
 
-    const calendarGrid = document.getElementById('mainCalendar');
-    calendarGrid.className = 'calendar-grid week-time-grid';
+    const grid     = document.getElementById('mainCalendar');
+    grid.className = '';
 
-    const realToday = new Date();
-    const todayStr  = toDateString(realToday);
-
-    const days = [];
-    for (let i = 0; i < 7; i++) {
+    const todayStr = toDs(new Date());
+    const days     = Array.from({length: 7}, (_, i) => {
         const d = new Date(weekStart);
         d.setDate(weekStart.getDate() + i);
-        days.push(d);
-    }
+        return d;
+    });
 
-    const weekStartStr = toDateString(weekStart);
-    const weekEndStr   = toDateString(weekEnd);
-    const weekEvents   = dbEvents.filter(e => e.eventDate >= weekStartStr && e.eventDate <= weekEndStr);
+    const wStart  = toDs(weekStart);
+    const wEnd    = toDs(weekEnd);
+    const wEvents = events.filter(e => e.eventDate >= wStart && e.eventDate <= wEnd);
 
-    // ── Full 24 hours ──
-    const START_HOUR  = 0;   // midnight
-    const END_HOUR    = 24;  // midnight next day
-    const HOURS       = END_HOUR - START_HOUR; // 24
-    const HOUR_HEIGHT = 56;  // px per hour — compact but readable
+    // 12 AM (0) → 11 PM (23) — 24 rows exactly
+    const START_H = 0;
+    const END_H   = 23;
+    const HOURS   = 24;          // rows: 0,1,...,23
+    const HOUR_H  = 56;          // px per row
+    const TOTAL_H = HOURS * HOUR_H; // 1344px — exact content height, no overflow
 
-    // Hour label formatter — 24h style
-    function hourLabel(h) {
-        return `${String(h).padStart(2, '0')}:00`;
-    }
+    // Time gutter: 24 labels
+    const gutterHTML = Array.from({length: HOURS}, (_, i) =>
+        `<div class="wtg-hour-label" style="height:${HOUR_H}px">${ampm(i)}</div>`
+    ).join('');
 
-    let html = `
+    // Column headers
+    const headHTML = days.map((d, i) => {
+        const isToday = toDs(d) === todayStr;
+        return `
+        <div class="wtg-col-head${isToday ? ' wtg-today' : ''}">
+            <span class="wtg-day-name">${dayNamesShort[i]}</span>
+            <span class="wtg-day-num${isToday ? ' wtg-day-num--today' : ''}">${d.getDate()}/${d.getMonth()+1}</span>
+        </div>`;
+    }).join('');
+
+    // Day columns — exactly HOURS rows, explicit pixel height on wrapper
+    const colsHTML = days.map(d => {
+        const ds      = toDs(d);
+        const isToday = ds === todayStr;
+        const dayEvs  = wEvents.filter(e => e.eventDate === ds);
+
+        // Exactly HOURS rows — no more, no less
+        const rowsHTML = Array.from({length: HOURS}, () =>
+            `<div class="wtg-hour-row" style="height:${HOUR_H}px"></div>`
+        ).join('');
+
+        const evHTML = dayEvs.map(ev => {
+            const col = clubColor(ev.clubName);
+            let topPx = 0;
+            if (ev.eventTime) {
+                const [h, m] = ev.eventTime.split(':').map(Number);
+                topPx = Math.max(0, (h + m/60) * HOUR_H);
+            }
+            const startLabel = ev.eventTime ? ampm(parseInt(ev.eventTime)) : '';
+            const endLabel = ev.eventEndTime ? ampm(parseInt(ev.eventEndTime)) : '';
+            const tLabel = startLabel + (endLabel ? ' — ' + endLabel : '');
+            return `
+            <div class="wtg-event" data-color="${col}" style="top:${topPx}px; height:${HOUR_H-4}px;cursor:pointer;" onclick="window.location.href='DetailedEvent.php?id=${ev.eventID}'">
+                <div class="wtg-event-inner">
+                    <div class="wtg-event-title">${esc(ev.eventTitle)}</div>
+                    ${tLabel ? `<div class="wtg-event-time">${tLabel}</div>` : ''}
+                    ${ev.venue ? `<div class="wtg-event-venue">
+                        <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        ${esc(ev.venue)}</div>` : ''}
+                    ${ev.clubName ? `<div class="wtg-event-club">${esc(ev.clubName)}</div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        return `
+        <div class="wtg-day-col${isToday ? ' wtg-col-today' : ''}" style="height:${TOTAL_H}px">
+            ${rowsHTML}
+            <div class="wtg-events-layer">${evHTML}</div>
+            ${isToday ? '<div class="wtg-now-line" id="nowLine"></div>' : ''}
+        </div>`;
+    }).join('');
+
+    grid.innerHTML = `
     <div class="wtg-wrapper">
-      <div class="wtg-header">
-        <div class="wtg-time-gutter-head"></div>
-        ${days.map((d, i) => {
-            const isToday = toDateString(d) === todayStr;
-            // Date shown as D/M e.g. "1/6"
-            const dateLabel = `${d.getDate()}/${d.getMonth() + 1}`;
-            return `
-            <div class="wtg-col-head ${isToday ? 'wtg-today' : ''}">
-                <span class="wtg-day-name">${dayNamesShort[i]}</span>
-                <span class="wtg-day-num ${isToday ? 'wtg-day-num--today' : ''}">${dateLabel}</span>
-            </div>`;
-        }).join('')}
-      </div>
-
-      <div class="wtg-body" id="wtgBody">
-        <div class="wtg-time-gutter">
-          ${Array.from({length: HOURS}, (_, i) => {
-              const h = START_HOUR + i;
-              return `<div class="wtg-hour-label" style="height:${HOUR_HEIGHT}px">${hourLabel(h)}</div>`;
-          }).join('')}
+        <div class="wtg-header">
+            <div class="wtg-time-gutter-head"></div>
+            ${headHTML}
         </div>
-
-        ${days.map((d) => {
-            const dateStr  = toDateString(d);
-            const isToday  = dateStr === todayStr;
-            const dayEvents = weekEvents.filter(e => e.eventDate === dateStr);
-
-            const gridLines = Array.from({length: HOURS}, () =>
-                `<div class="wtg-hour-row" style="height:${HOUR_HEIGHT}px"></div>`
-            ).join('');
-
-            let colorIndex = 0;
-            const eventBlocks = dayEvents.map(event => {
-                const color = colorPalette[colorIndex % colorPalette.length];
-                colorIndex++;
-
-                let topPx    = 0;
-                let heightPx = HOUR_HEIGHT;
-                if (event.eventTime) {
-                    const parts    = event.eventTime.split(':');
-                    const h        = parseInt(parts[0], 10);
-                    const m        = parseInt(parts[1] || '0', 10);
-                    const totalMins = h * 60 + m; // from midnight
-                    topPx = (totalMins / 60) * HOUR_HEIGHT;
-                }
-
-                const timeLabel = event.eventTime ? formatTime24(event.eventTime) : '';
-
-                return `
-                <div class="wtg-event" data-color="${color}" style="top:${topPx}px; height:${heightPx - 4}px;">
-                    <div class="wtg-event-inner">
-                        <div class="wtg-event-title">${escapeHtml(event.eventTitle)}</div>
-                        ${timeLabel ? `<div class="wtg-event-time">${timeLabel}</div>` : ''}
-                        ${event.venue ? `<div class="wtg-event-venue">
-                            <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                            ${escapeHtml(event.venue)}
-                        </div>` : ''}
-                        ${event.clubName ? `<div class="wtg-event-club">${escapeHtml(event.clubName)}</div>` : ''}
-                    </div>
-                </div>`;
-            }).join('');
-
-            return `
-            <div class="wtg-day-col ${isToday ? 'wtg-col-today' : ''}">
-                ${gridLines}
-                <div class="wtg-events-layer">${eventBlocks}</div>
-                ${isToday ? '<div class="wtg-now-line" id="nowLine"></div>' : ''}
-            </div>`;
-        }).join('')}
-      </div>
+        <div class="wtg-body" id="wtgBody" style="max-height:640px; height:${TOTAL_H}px">
+            <div class="wtg-time-gutter" style="height:${TOTAL_H}px">${gutterHTML}</div>
+            ${colsHTML}
+        </div>
     </div>`;
-
-    calendarGrid.innerHTML = html;
 
     positionNowLine();
 
-    // Scroll to current hour (or 8 AM default)
+    // Scroll to current hour
     const body = document.getElementById('wtgBody');
     if (body) {
-        const scrollHour = realToday.getHours() > 0 ? realToday.getHours() - 1 : 8;
-        body.scrollTop = scrollHour * HOUR_HEIGHT;
+        const h = new Date().getHours();
+        body.scrollTop = Math.max(0, h - 1) * HOUR_H;
     }
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-function getWeekStart(date) {
-    const d   = new Date(date);
-    const day = d.getDay();
-    const diff = (day === 0) ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    d.setHours(0, 0, 0, 0);
-    return d;
-}
-
-function toDateString(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// 24-hour format: "14:30"
-function formatTime24(timeStr) {
-    const parts = timeStr.split(':');
-    const h = String(parseInt(parts[0], 10)).padStart(2, '0');
-    const m = parts[1] ? parts[1].substring(0, 2) : '00';
-    return `${h}:${m}`;
-}
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function positionNowLine() {
-    const line = document.getElementById('nowLine');
-    if (!line) return;
-    const now         = new Date();
-    const HOUR_HEIGHT = 56;
-    const mins        = now.getHours() * 60 + now.getMinutes(); // from midnight
-    line.style.top    = `${(mins / 60) * HOUR_HEIGHT}px`;
-}
-
-// ─── Render dispatcher ─────────────────────────────────────────────────────
+// ─── Dispatcher ────────────────────────────────────────────────────────────
 async function renderCalendar() {
-    if (currentView === 'week') {
-        await renderWeekView();
-    } else {
-        await renderMonthView();
-    }
+    currentView === 'week' ? await renderWeekView() : await renderMonthView();
 }
-
-// ─── Navigation ───────────────────────────────────────────────────────────
 function changeMonth(offset) {
-    if (currentView === 'week') {
-        currentDate.setDate(currentDate.getDate() + offset * 7);
-    } else {
-        currentDate.setMonth(currentDate.getMonth() + offset);
-    }
+    if (currentView === 'week') currentDate.setDate(currentDate.getDate() + offset * 7);
+    else currentDate.setMonth(currentDate.getMonth() + offset);
+    renderCalendar();
+}
+function switchView(v) {
+    currentView = v;
+    document.getElementById('btnMonth').classList.toggle('active', v === 'month');
+    document.getElementById('btnWeek').classList.toggle('active', v === 'week');
     renderCalendar();
 }
 
-// ─── View toggle ──────────────────────────────────────────────────────────
-function switchView(viewType) {
-    currentView = viewType;
-    document.getElementById('btnMonth').classList.toggle('active', viewType === 'month');
-    document.getElementById('btnWeek').classList.toggle('active', viewType === 'week');
-    renderCalendar();
-}
-
-// ─── Boot ─────────────────────────────────────────────────────────────────
 renderCalendar();
 setInterval(positionNowLine, 60000);
