@@ -121,7 +121,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Event Image (optional) :</label>
+                    <label>Event Poster (optional) :</label>
                     <input type="file" name="eventImage" accept="image/jpeg,image/png,image/gif,image/webp" style="width: 100%; padding: 8px 0;">
                 </div>
 
