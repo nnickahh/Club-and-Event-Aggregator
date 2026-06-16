@@ -11,7 +11,7 @@
     $studentID = $_SESSION['student_id'];
 
     // Registered events
-    $eventsStmt = $conn->prepare("SELECT e.*, a.clubName FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID WHERE r.studentID = ? ORDER BY e.eventDate ASC");
+    $eventsStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE r.studentID = ? ORDER BY e.eventDate ASC");
     $eventsStmt->bind_param("s", $studentID);
     $eventsStmt->execute();
     $eventsResult = $eventsStmt->get_result();
@@ -94,6 +94,9 @@
                     <div class="horizontal-card">
                         <div class="card-body">
                             <span class="tag tag-confirmed">Event Confirmed</span>
+                            <?php if (!empty($row['clubName'])): ?>
+                            <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" style="text-decoration:none;"><span class="tag"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
+                            <?php endif; ?>
                             <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
                             <div class="card-meta">
                                 <?php echo date('d F Y', strtotime($row['eventDate'])); ?> |

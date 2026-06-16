@@ -102,6 +102,72 @@
         error_log('DB eventEndTime migration error: ' . $e->getMessage());
     }
 
+    // Add payment columns to `events` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'payment_methods'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN payment_methods VARCHAR(100) DEFAULT NULL AFTER status");
+            $conn->query("ALTER TABLE events ADD COLUMN tng_phone VARCHAR(20) DEFAULT NULL AFTER payment_methods");
+            $conn->query("ALTER TABLE events ADD COLUMN tng_qr VARCHAR(255) DEFAULT NULL AFTER tng_phone");
+            $conn->query("ALTER TABLE events ADD COLUMN bank_details TEXT DEFAULT NULL AFTER tng_qr");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB payment columns migration error: ' . $e->getMessage());
+    }
+
+    // Add `fee` column to `events` table (for event fee)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'fee'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN fee DECIMAL(10,2) DEFAULT 0.00 AFTER bank_details");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB fee column migration error: ' . $e->getMessage());
+    }
+
+    // Add `payment_status` column to `registrations` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM registrations LIKE 'payment_status'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE registrations ADD COLUMN payment_status ENUM('unpaid','paid') DEFAULT 'unpaid'");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB payment_status migration error: ' . $e->getMessage());
+    }
+
+    // Add `attendance_status` column to `registrations` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM registrations LIKE 'attendance_status'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE registrations ADD COLUMN attendance_status ENUM('absent','present') DEFAULT 'absent'");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB attendance_status migration error: ' . $e->getMessage());
+    }
+
+    // Add `payment_method` column to `registrations` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM registrations LIKE 'payment_method'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE registrations ADD COLUMN payment_method VARCHAR(50) DEFAULT NULL AFTER payment_status");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB payment_method migration error: ' . $e->getMessage());
+    }
+
+    // Extend events.status ENUM to include 'ended' and 'cancelled'
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'status'");
+        if ($check && $check->num_rows > 0) {
+            $row = $check->fetch_assoc();
+            if (strpos($row['Type'], 'cancelled') === false) {
+                $conn->query("ALTER TABLE events MODIFY COLUMN status ENUM('pending','approved','declined','ended','cancelled') DEFAULT 'pending'");
+            }
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB status ENUM migration error: ' . $e->getMessage());
+    }
+
     // Add `socialMedia` column to `clubs` table if it doesn't exist (for club social links)
     try {
         $check = $conn->query("SHOW COLUMNS FROM clubs LIKE 'socialMedia'");
@@ -145,5 +211,42 @@
         }
     } catch (mysqli_sql_exception $e) {
         error_log('DB notifications table creation error: ' . $e->getMessage());
+    }
+
+    // Add `eventID` column to `notifications` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM notifications LIKE 'eventID'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE notifications ADD COLUMN eventID INT UNSIGNED DEFAULT NULL AFTER message");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB eventID migration error: ' . $e->getMessage());
+    }
+
+    // Create `club_notify` table (student subscriptions to club notifications)
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS club_notify (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            studentID VARCHAR(20) NOT NULL,
+            adminID VARCHAR(20) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_sub (studentID, adminID)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB club_notify table creation error: ' . $e->getMessage());
+    }
+
+    // Create `student_notifications` table
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS student_notifications (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            studentID VARCHAR(20) NOT NULL,
+            message VARCHAR(500) NOT NULL,
+            eventID INT UNSIGNED DEFAULT NULL,
+            is_read TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB student_notifications table creation error: ' . $e->getMessage());
     }
 ?>

@@ -55,8 +55,8 @@
         }
     }
 
-    // Fetch member count and list from club_members
-    $memCountStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM club_members WHERE adminID = ?");
+    // Fetch member count (only key positions visible to students)
+    $memCountStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM club_members WHERE adminID = ? AND LOWER(role) IN ('president', 'secretary', 'treasurer')");
     $memCountStmt->bind_param("s", $adminID);
     $memCountStmt->execute();
     $memberCount = $memCountStmt->get_result()->fetch_assoc()['cnt'];
@@ -66,8 +66,8 @@
         SELECT cm.studentID, cm.role, cm.joined_at, s.name, s.email
         FROM club_members cm
         JOIN students s ON cm.studentID = s.studentID
-        WHERE cm.adminID = ?
-        ORDER BY cm.joined_at ASC
+        WHERE cm.adminID = ? AND LOWER(cm.role) IN ('president', 'secretary', 'treasurer')
+        ORDER BY FIELD(LOWER(cm.role), 'president', 'secretary', 'treasurer'), cm.joined_at ASC
     ");
     $membersStmt->bind_param("s", $adminID);
     $membersStmt->execute();
@@ -95,11 +95,16 @@
         $nameResult = $nameStmt->get_result();
         $studentName = ($nameRow = $nameResult->fetch_assoc()) ? $nameRow['name'] : $studentID;
         $nameStmt->close();
-        $notifMsg = "$studentName joined your club";
         $notifStmt = $conn->prepare("INSERT INTO notifications (adminID, message) VALUES (?, ?)");
+        $notifMsg = "$studentName joined your club";
         $notifStmt->bind_param("ss", $adminID, $notifMsg);
         $notifStmt->execute();
         $notifStmt->close();
+        // Auto-subscribe to club notifications
+        $subStmt = $conn->prepare("INSERT IGNORE INTO club_notify (studentID, adminID) VALUES (?, ?)");
+        $subStmt->bind_param("ss", $studentID, $adminID);
+        $subStmt->execute();
+        $subStmt->close();
         header("Location: ClubsDetails.php?id=" . $clubID);
         exit();
     }
@@ -110,9 +115,41 @@
         $quitStmt->bind_param("ss", $studentID, $adminID);
         $quitStmt->execute();
         $quitStmt->close();
+        // Auto-unsubscribe from club notifications
+        $unsubStmt = $conn->prepare("DELETE FROM club_notify WHERE studentID = ? AND adminID = ?");
+        $unsubStmt->bind_param("ss", $studentID, $adminID);
+        $unsubStmt->execute();
+        $unsubStmt->close();
         header("Location: ClubsDetails.php?id=" . $clubID);
         exit();
     }
+
+    // Handle notify subscribe
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['notify_sub'])) {
+        $subStmt = $conn->prepare("INSERT IGNORE INTO club_notify (studentID, adminID) VALUES (?, ?)");
+        $subStmt->bind_param("ss", $studentID, $adminID);
+        $subStmt->execute();
+        $subStmt->close();
+        header("Location: ClubsDetails.php?id=" . $clubID);
+        exit();
+    }
+
+    // Handle notify unsubscribe
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['notify_unsub'])) {
+        $unsubStmt = $conn->prepare("DELETE FROM club_notify WHERE studentID = ? AND adminID = ?");
+        $unsubStmt->bind_param("ss", $studentID, $adminID);
+        $unsubStmt->execute();
+        $unsubStmt->close();
+        header("Location: ClubsDetails.php?id=" . $clubID);
+        exit();
+    }
+
+    // Check if current student is subscribed to notifications for this club
+    $notifyStmt = $conn->prepare("SELECT * FROM club_notify WHERE studentID = ? AND adminID = ?");
+    $notifyStmt->bind_param("ss", $studentID, $adminID);
+    $notifyStmt->execute();
+    $isNotifying = $notifyStmt->get_result()->num_rows > 0;
+    $notifyStmt->close();
 
     // Check if current student is registered for any of this club's events
     $regStmt = $conn->prepare("SELECT r.eventID FROM registrations r JOIN events e ON r.eventID = e.eventID WHERE e.adminID = ? AND r.studentID = ?");
@@ -159,11 +196,33 @@
                                 <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to quit this club?');">
                                     <button type="submit" name="quit_club" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='#dc2626';this.style.color='#dc2626'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#64748b'">Quit Club</button>
                                 </form>
+                                <?php if ($isNotifying): ?>
+                                <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:500;background:#e0e7ff;color:#4f46e5;border:1px solid #c7d2fe;">🔔 Notifying</span>
+                                <form method="POST" style="display:inline;">
+                                    <button type="submit" name="notify_unsub" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;">Unsubscribe</button>
+                                </form>
+                                <?php else: ?>
+                                <form method="POST" style="display:inline;">
+                                    <button type="submit" name="notify_sub" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;">🔔 Notify Me</button>
+                                </form>
+                                <?php endif; ?>
                             </div>
                         <?php else: ?>
-                            <form method="POST" style="display:inline;">
-                                <button type="submit" name="join_club" style="padding:6px 20px;border:none;border-radius:20px;font-size:13px;font-weight:600;background:var(--red,#dc2626);color:#fff;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">+ Join Club</button>
-                            </form>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <form method="POST" style="display:inline;">
+                                    <button type="submit" name="join_club" style="padding:6px 20px;border:none;border-radius:20px;font-size:13px;font-weight:600;background:var(--red,#dc2626);color:#fff;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">+ Join Club</button>
+                                </form>
+                                <?php if ($isNotifying): ?>
+                                <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:500;background:#e0e7ff;color:#4f46e5;border:1px solid #c7d2fe;">🔔 Notifying</span>
+                                <form method="POST" style="display:inline;">
+                                    <button type="submit" name="notify_unsub" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;">Unsubscribe</button>
+                                </form>
+                                <?php else: ?>
+                                <form method="POST" style="display:inline;">
+                                    <button type="submit" name="notify_sub" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;">🔔 Notify Me</button>
+                                </form>
+                                <?php endif; ?>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -174,7 +233,7 @@
         <div class="tab-navigation-bar" style="margin-top:24px;">
             <button type="button" class="tab-trigger active" onclick="switchTab(event, 'overview-tab')">Overview</button>
             <button type="button" class="tab-trigger" onclick="switchTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($ongoingEvents) + count($upcomingEvents); ?></span></button>
-            <button type="button" class="tab-trigger" onclick="switchTab(event, 'members-tab')">Members <span class="tab-counter"><?php echo $memberCount; ?></span></button>
+            <button type="button" class="tab-trigger" onclick="switchTab(event, 'members-tab')">Committee <span class="tab-counter"><?php echo $memberCount; ?></span></button>
             <button type="button" class="tab-trigger" onclick="switchTab(event, 'contacts-tab')">Contacts</button>
         </div>
 
@@ -250,7 +309,7 @@
         <!-- Members tab -->
         <div id="members-tab" class="tab-content-panel">
             <div class="section-flex-header">
-                <h3>Members (<?php echo $memberCount; ?>)</h3>
+                <h3>Committee (<?php echo $memberCount; ?>)</h3>
             </div>
             <?php if (!empty($members)): ?>
                 <div class="table-wrapper" style="overflow-x:auto;">
@@ -284,8 +343,8 @@
             <?php else: ?>
                 <div class="empty-state-canvas">
                     <div class="empty-icon">👥</div>
-                    <h4>No members yet</h4>
-                    <p>Students who register for this club's events will appear here.</p>
+                    <h4>No committee yet</h4>
+                    <p>The club president, secretary, and treasurer will appear here once assigned.</p>
                 </div>
             <?php endif; ?>
         </div>

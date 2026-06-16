@@ -11,9 +11,9 @@
         $stmt->bind_param("si", $studentID, $eventID);
         
         if ($stmt->execute()) {
-            header("Location: MyEvent.php?msg=cancelled");
+            header("Location: DetailedEvent.php?id=" . $eventID . "&cancelled=1");
         } else {
-            header("Location: MyEvent.php?error=fail");
+            header("Location: DetailedEvent.php?id=" . $eventID . "&cancelled=0");
         }
         exit();
     }

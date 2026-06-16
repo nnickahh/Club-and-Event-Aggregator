@@ -110,7 +110,7 @@
                         <span class="mod-activity-dot"></span>
                         <span>
                             <span class="act-title"><?php echo htmlspecialchars($act['eventTitle']); ?></span>
-                            <span class="act-club">by <?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></span>
+                            <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo (int)$act['adminID']; ?>" style="color:inherit;text-decoration:underline;"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
                             <span class="act-status">-
                                 <?php
                                     $s = $act['status'] ?? 'approved';

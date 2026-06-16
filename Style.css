@@ -2595,6 +2595,7 @@ body.is-editing-mode .show-on-edit input[type="file"] {
     gap: 6px;
     align-items: center;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .role-input-form input[type="text"] {
@@ -2621,6 +2622,7 @@ body.is-editing-mode .show-on-edit input[type="file"] {
     color: #fff;
     cursor: pointer;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .role-input-form button:hover {

@@ -8,6 +8,9 @@
         header("Location: AdminLogin.php");
         exit();
     }
+    // Flash message for popup
+    $flashMessage = $_SESSION['flash_message'] ?? null;
+    unset($_SESSION['flash_message']);
     session_write_close();
 
     $adminID = $_SESSION['admin_id'];
@@ -23,6 +26,7 @@
     $upcomingEvents = [];
     $pendingEvents = [];
     $completedEvents = [];
+    $cancelledEvents = [];
     $currentDate = date('Y-m-d');
 
     if ($result && $result->num_rows > 0) {
@@ -34,8 +38,10 @@
                 $ongoingEvents[] = $row;
             } elseif ($status === 'approved' && $row['eventDate'] > $currentDate) {
                 $upcomingEvents[] = $row;
-            } elseif ($status === 'approved' && $row['eventDate'] < $currentDate) {
+            } elseif (($status === 'approved' && $row['eventDate'] < $currentDate) || $status === 'ended') {
                 $completedEvents[] = $row;
+            } elseif ($status === 'cancelled') {
+                $cancelledEvents[] = $row;
             }
         }
     }
@@ -88,7 +94,7 @@
                         </div>
 
                         <div class="action-buttons">
-                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Edit</a>
+                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
                             <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
                         </div>
                     </article>
@@ -125,7 +131,7 @@
                         </div>
 
                         <div class="action-buttons">
-                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Edit</a>
+                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
                             <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
                         </div>
                     </article>
@@ -162,7 +168,7 @@
                         </div>
 
                         <div class="action-buttons">
-                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Edit</a>
+                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
                             <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
                         </div>
                     </article>
@@ -207,6 +213,53 @@
             <?php endif; ?>
         </section>
 
+        <!-- CANCELLED EVENTS SECTION -->
+        <h3 class="section-title">Cancelled Events</h3>
+        <section class="event-grid">
+            <?php if (!empty($cancelledEvents)): ?>
+                <?php foreach($cancelledEvents as $event): ?>
+                    <article class="event-card event-card-completed"> 
+                        <div>
+                            <span class="tag" style="background:#fef2f2;color:#dc2626;">Cancelled</span>
+                            <?php if (!empty($event['eventImage'])): ?>
+                                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;margin-bottom:12px;opacity:0.7;">
+                            <?php endif; ?>
+                            <h3><?php echo htmlspecialchars($event['eventTitle']); ?></h3>
+                            
+                            <div class="event-meta">
+                                <strong>Date:</strong> <?php echo date('d M Y', strtotime($event['eventDate'])); ?><br>
+                                <strong>Status:</strong> Cancelled
+                            </div>
+                        </div>
+
+                        <div class="action-buttons">
+                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="event-empty-box">
+                    <p>No Cancelled Events</p>
+                    <p class="empty-subtext">Events that are cancelled will appear here.</p>
+                </div>
+            <?php endif; ?>
+        </section>
+
     </main>
+
+    <?php if ($flashMessage): ?>
+    <div id="flashOverlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000;">
+        <div style="background:#fff;border-radius:12px;padding:32px 40px;max-width:420px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.15);">
+            <?php
+                $isError = stripos($flashMessage, 'deleted') !== false || stripos($flashMessage, 'cancelled') !== false;
+            ?>
+            <div style="font-size:48px;margin-bottom:12px;"><?php echo $isError ? '🗑️' : '🎉'; ?></div>
+            <h3 style="margin:0 0 8px;font-size:18px;"><?php echo $isError ? 'Done!' : 'Event Submitted!'; ?></h3>
+            <p style="margin:0 0 20px;font-size:14px;color:#666;line-height:1.5;"><?php echo htmlspecialchars($flashMessage); ?></p>
+            <button onclick="document.getElementById('flashOverlay').remove()" style="background:var(--red);color:#fff;border:none;padding:10px 28px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">OK</button>
+        </div>
+    </div>
+    <?php endif; ?>
+
 </body>
 </html>

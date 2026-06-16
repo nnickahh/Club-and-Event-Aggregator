@@ -12,7 +12,7 @@
     $tab = isset($_GET['tab']) ? $_GET['tab'] : 'pending';
     $today = date('Y-m-d');
     $events = [];
-    $counts = ['pending' => 0, 'ongoing' => 0, 'upcoming' => 0, 'completed' => 0];
+    $counts = ['pending' => 0, 'ongoing' => 0, 'upcoming' => 0, 'completed' => 0, 'cancelled' => 0];
 
     try {
         $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'pending'");
@@ -24,24 +24,31 @@
         $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'approved' AND eventDate > '$today'");
         $counts['upcoming'] = $r ? $r->fetch_assoc()['c'] : 0;
 
-        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'approved' AND eventDate < '$today'");
+        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE (status = 'approved' AND eventDate < '$today') OR status = 'ended'");
         $counts['completed'] = $r ? $r->fetch_assoc()['c'] : 0;
 
+        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'cancelled'");
+        $counts['cancelled'] = $r ? $r->fetch_assoc()['c'] : 0;
+
+        $join = " FROM events e LEFT JOIN admins a ON e.adminID = a.adminID";
         switch ($tab) {
             case 'pending':
-                $q = "SELECT e.*, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'pending' ORDER BY e.created_at DESC";
+                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'pending' ORDER BY e.created_at DESC";
                 break;
             case 'ongoing':
-                $q = "SELECT e.*, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'approved' AND e.eventDate = '$today' ORDER BY e.eventTime ASC";
+                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'approved' AND e.eventDate = '$today' ORDER BY e.eventTime ASC";
                 break;
             case 'upcoming':
-                $q = "SELECT e.*, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'approved' AND e.eventDate > '$today' ORDER BY e.eventDate ASC";
+                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'approved' AND e.eventDate > '$today' ORDER BY e.eventDate ASC";
                 break;
             case 'completed':
-                $q = "SELECT e.*, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'approved' AND e.eventDate < '$today' ORDER BY e.eventDate DESC";
+                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE (e.status = 'approved' AND e.eventDate < '$today') OR e.status = 'ended' ORDER BY e.eventDate DESC";
+                break;
+            case 'cancelled':
+                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'cancelled' ORDER BY e.eventDate DESC";
                 break;
             default:
-                $q = "SELECT e.*, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'pending' ORDER BY e.created_at DESC";
+                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'pending' ORDER BY e.created_at DESC";
         }
         $result = $conn->query($q);
         if ($result) { $events = $result->fetch_all(MYSQLI_ASSOC); }
@@ -89,13 +96,16 @@
             <a href="ModeratorEvents.php?tab=completed" class="mod-tab-link <?php echo $tab === 'completed' ? 'active' : ''; ?>">
                 Completed <?php if ($counts['completed'] > 0): ?><span class="tab-count"><?php echo $counts['completed']; ?></span><?php endif; ?>
             </a>
+            <a href="ModeratorEvents.php?tab=cancelled" class="mod-tab-link <?php echo $tab === 'cancelled' ? 'active' : ''; ?>">
+                Cancelled <?php if ($counts['cancelled'] > 0): ?><span class="tab-count"><?php echo $counts['cancelled']; ?></span><?php endif; ?>
+            </a>
         </div>
 
         <section class="event-grid">
             <?php if (!empty($events)): ?>
                 <?php foreach ($events as $event): ?>
                     <article class="event-card">
-                        <div class="card-stripe" data-color="<?php echo $tab === 'completed' ? 'green' : ($tab === 'pending' ? 'amber' : ($tab === 'ongoing' ? 'blue' : 'purple')); ?>"></div>
+                        <div class="card-stripe" data-color="<?php echo $tab === 'completed' ? 'green' : ($tab === 'cancelled' ? 'red' : ($tab === 'pending' ? 'amber' : ($tab === 'ongoing' ? 'blue' : 'purple'))); ?>"></div>
                         <?php if (!empty($event['eventImage'])): ?>
                             <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;height:160px;object-fit:cover;display:block;">
                         <?php endif; ?>
@@ -106,6 +116,8 @@
                                 <span class="mod-status-tag approved">Ongoing</span>
                             <?php elseif ($tab === 'upcoming'): ?>
                                 <span class="mod-status-tag approved">Upcoming</span>
+                            <?php elseif ($tab === 'cancelled'): ?>
+                                <span class="mod-status-tag approved" style="background:#fef2f2;color:#dc2626;">Cancelled</span>
                             <?php else: ?>
                                 <span class="mod-status-tag approved">Completed</span>
                             <?php endif; ?>
@@ -123,7 +135,7 @@
                                 </div>
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                                    <span><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span>
+                                    <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" style="text-decoration:none;color:inherit;"><span><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
                                 </div>
                             </div>
 

@@ -27,6 +27,32 @@
                 $stmt = $conn->prepare("UPDATE events SET status = 'approved' WHERE eventID = ?");
                 $stmt->bind_param("i", $eventID);
                 $stmt->execute();
+                // Notify subscribed students
+                $eStmt = $conn->prepare("SELECT eventTitle, adminID FROM events WHERE eventID = ?");
+                $eStmt->bind_param("i", $eventID);
+                $eStmt->execute();
+                $eRow = $eStmt->get_result()->fetch_assoc();
+                $eStmt->close();
+                if ($eRow) {
+                    $clubStmt = $conn->prepare("SELECT clubName FROM admins WHERE adminID = ?");
+                    $clubStmt->bind_param("s", $eRow['adminID']);
+                    $clubStmt->execute();
+                    $clubRow = $clubStmt->get_result()->fetch_assoc();
+                    $clubName = $clubRow ? $clubRow['clubName'] : 'A club';
+                    $clubStmt->close();
+                    $subStmt = $conn->prepare("SELECT studentID FROM club_notify WHERE adminID = ?");
+                    $subStmt->bind_param("s", $eRow['adminID']);
+                    $subStmt->execute();
+                    $subResult = $subStmt->get_result();
+                    $msg = $clubName . ' posted a new event: ' . $eRow['eventTitle'];
+                    $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+                    while ($sub = $subResult->fetch_assoc()) {
+                        $notifStmt->bind_param("ssi", $sub['studentID'], $msg, $eventID);
+                        $notifStmt->execute();
+                    }
+                    $notifStmt->close();
+                    $subStmt->close();
+                }
                 $message = 'Event has been approved successfully.';
                 $msgType = 'success';
             } elseif ($action === 'decline') {
@@ -113,7 +139,7 @@
             <?php if (!empty($event['eventImage'])): ?>
                 <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;max-height:320px;object-fit:cover;border-radius:8px;margin-bottom:20px;">
             <?php endif; ?>
-            <span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span>
+            <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" style="text-decoration:none;"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
 
             <?php if ($eventStatus === 'pending'): ?>
                 <span class="mod-pending-badge" style="display:inline-flex;margin-top:10px;"><span class="mod-badge-dot"></span>Pending review</span>
@@ -180,8 +206,41 @@
                     <p><strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></p>
                     <p><strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?></p>
                     <p><strong>Capacity:</strong> <?php echo htmlspecialchars($event['capacity']); ?> seats</p>
+                    <p><strong>Fee:</strong> <?php $fee = floatval($event['fee'] ?? 0); echo $fee > 0 ? 'RM' . number_format($fee, 2) : 'Free'; ?></p>
                     <p><strong>Club:</strong> <?php echo htmlspecialchars($event['club_name'] ?? 'Unknown'); ?></p>
                     <p><strong>Club Admin:</strong> <?php echo htmlspecialchars($event['admin_name'] ?? 'Unknown'); ?></p>
+                    <?php $fee = floatval($event['fee'] ?? 0); ?>
+                    <?php if ($fee > 0 && !empty($event['payment_methods'])): ?>
+                        <p><strong>Payment Methods:</strong>
+                            <?php
+                            $methods = explode(',', $event['payment_methods']);
+                            $labels = ['cash'=>'Cash', 'tng'=>'TNG (Touch \'n Go)', 'bank_in'=>'Bank In'];
+                            $methodTags = [];
+                            foreach ($methods as $m) {
+                                $methodTags[] = $labels[trim($m)] ?? trim($m);
+                            }
+                            echo implode(' &middot; ', $methodTags);
+                            ?>
+                        </p>
+                        <?php if (in_array('tng', $methods) && (!empty($event['tng_phone']) || !empty($event['tng_qr']))): ?>
+                            <div style="margin-top:8px;padding:10px 14px;background:#f0f9ff;border-radius:8px;font-size:13px;">
+                                <strong style="color:#0369a1;">TNG Details</strong><br>
+                                <?php if (!empty($event['tng_phone'])): ?>Phone: <?php echo htmlspecialchars($event['tng_phone']); ?><br><?php endif; ?>
+                                <?php if (!empty($event['tng_qr'])): ?><img src="<?php echo htmlspecialchars($event['tng_qr']); ?>" style="max-width:150px;margin-top:6px;border-radius:6px;"><?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (in_array('bank_in', $methods) && !empty($event['bank_details'])): ?>
+                            <?php $bankData = json_decode($event['bank_details'], true); ?>
+                            <?php if ($bankData): ?>
+                            <div style="margin-top:8px;padding:10px 14px;background:#f0f9ff;border-radius:8px;font-size:13px;">
+                                <strong style="color:#0369a1;">Bank In Details</strong><br>
+                                <?php if (!empty($bankData['bank_name'])): ?>Bank: <?php echo htmlspecialchars($bankData['bank_name']); ?><br><?php endif; ?>
+                                <?php if (!empty($bankData['bank_account'])): ?>Account: <?php echo htmlspecialchars($bankData['bank_account']); ?><br><?php endif; ?>
+                                <?php if (!empty($bankData['bank_holder'])): ?>Holder: <?php echo htmlspecialchars($bankData['bank_holder']); ?><?php endif; ?>
+                            </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </div>
 
                 <hr class="divider-light">

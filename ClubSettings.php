@@ -96,20 +96,40 @@
         }
     }
 
+    // Handle end event action
+    if (isset($_POST['end_event'])) {
+        $endEventID = (int)$_POST['end_event_id'];
+        $upd = $conn->prepare("UPDATE events SET status = 'ended' WHERE eventID = ? AND adminID = ?");
+        $upd->bind_param("is", $endEventID, $adminID);
+        $upd->execute();
+        $upd->close();
+        header("Location: ClubSettings.php");
+        exit();
+    }
+
     // 3. Collect active tracked events
     $currentDate = date('Y-m-d');
-    $eventStmt = $conn->prepare("SELECT eventID, eventTitle, eventDate, venue, eventTime, eventEndTime FROM events WHERE adminID = ? ORDER BY eventDate ASC");
+    $eventStmt = $conn->prepare("SELECT eventID, eventTitle, eventDate, venue, eventTime, eventEndTime, status FROM events WHERE adminID = ? ORDER BY eventDate ASC");
     $eventStmt->bind_param("s", $adminID);
     $eventStmt->execute();
     $eventsResult = $eventStmt->get_result();
     
     $ongoingEvents = [];
     $upcomingEvents = [];
+    $pendingEvents = [];
+    $completedEvents = [];
+    $cancelledEvents = [];
     while($ev = $eventsResult->fetch_assoc()) {
-        if ($ev['eventDate'] == $currentDate) {
+        if ($ev['status'] === 'pending') {
+            $pendingEvents[] = $ev;
+        } elseif ($ev['status'] === 'approved' && $ev['eventDate'] == $currentDate) {
             $ongoingEvents[] = $ev;
-        } elseif ($ev['eventDate'] > $currentDate) {
+        } elseif ($ev['status'] === 'approved' && $ev['eventDate'] > $currentDate) {
             $upcomingEvents[] = $ev;
+        } elseif (($ev['status'] === 'approved' && $ev['eventDate'] < $currentDate) || $ev['status'] === 'ended') {
+            $completedEvents[] = $ev;
+        } elseif ($ev['status'] === 'cancelled') {
+            $cancelledEvents[] = $ev;
         }
     }
     $eventStmt->close();
@@ -191,7 +211,7 @@
 
             <div class="tab-navigation-bar">
                 <button type="button" class="tab-trigger active" onclick="switchActiveTab(event, 'overview-tab')">Overview</button>
-                <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($ongoingEvents) + count($upcomingEvents); ?></span></button>
+                <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($ongoingEvents) + count($upcomingEvents) + count($pendingEvents) + count($completedEvents) + count($cancelledEvents); ?></span></button>
                 <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'members-tab')">Members <span class="tab-counter"><?php echo $membersResult->num_rows; ?></span></button>
                 <button type="button" class="tab-trigger" onclick="switchActiveTab(event, 'contacts-tab')">Contacts</button>
             </div>
@@ -249,7 +269,7 @@
                                 <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
                             </div>
                             <div class="strip-actions">
-                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Edit</a>
+                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -272,14 +292,83 @@
                                 <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
                             </div>
                             <div class="strip-actions">
-                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Edit</a>
+                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
 
-            <?php if (empty($ongoingEvents) && empty($upcomingEvents)): ?>
+            <?php if (!empty($pendingEvents)): ?>
+                <div class="section-flex-header" style="<?php echo !empty($ongoingEvents) || !empty($upcomingEvents) ? 'margin-top:24px;' : ''; ?>">
+                    <h3>Pending Events</h3>
+                </div>
+                <div class="modern-events-list">
+                    <?php foreach($pendingEvents as $ev): ?>
+                        <div class="event-strip-card">
+                            <div class="date-badge-box">
+                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                            </div>
+                            <div class="strip-main-info">
+                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
+                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
+                            </div>
+                            <div class="strip-actions">
+                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($completedEvents)): ?>
+                <div class="section-flex-header" style="<?php echo !empty($ongoingEvents) || !empty($upcomingEvents) || !empty($pendingEvents) ? 'margin-top:24px;' : ''; ?>">
+                    <h3>Completed Events</h3>
+                </div>
+                <div class="modern-events-list">
+                    <?php foreach($completedEvents as $ev): ?>
+                        <div class="event-strip-card">
+                            <div class="date-badge-box">
+                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                            </div>
+                            <div class="strip-main-info">
+                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
+                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
+                            </div>
+                            <div class="strip-actions">
+                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($cancelledEvents)): ?>
+                <div class="section-flex-header" style="margin-top:24px;">
+                    <h3>Cancelled Events</h3>
+                </div>
+                <div class="modern-events-list">
+                    <?php foreach($cancelledEvents as $ev): ?>
+                        <div class="event-strip-card">
+                            <div class="date-badge-box">
+                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                            </div>
+                            <div class="strip-main-info">
+                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
+                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
+                            </div>
+                            <div class="strip-actions">
+                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if (empty($ongoingEvents) && empty($upcomingEvents) && empty($pendingEvents) && empty($completedEvents) && empty($cancelledEvents)): ?>
                 <div class="empty-state-canvas">
                     <div class="empty-icon">📅</div>
                     <h4>No active ongoing events</h4>
@@ -318,7 +407,7 @@
                                             <?php echo htmlspecialchars($memb['role']); ?>
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="white-space:nowrap;">
                                         <form method="POST" class="role-input-form" onsubmit="return confirm('Update role for <?php echo htmlspecialchars($memb['studentID']); ?>?');">
                                             <input type="hidden" name="update_role" value="1">
                                             <input type="hidden" name="student_id" value="<?php echo htmlspecialchars($memb['studentID']); ?>">

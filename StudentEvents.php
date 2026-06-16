@@ -13,13 +13,13 @@
     // Fetch clubs for filter dropdown (only those with approved events)
     $clubsResult = $conn->query("SELECT DISTINCT a.clubName FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'approved' AND a.clubName IS NOT NULL ORDER BY a.clubName ASC");
 
-    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.eventDate = ? AND e.status = 'approved' ORDER BY e.eventTime ASC");
+    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE e.eventDate = ? AND e.status = 'approved' ORDER BY e.eventTime ASC");
     $ongoingStmt->bind_param("s", $currentDate);
     $ongoingStmt->execute();
     $ongoingResult = $ongoingStmt->get_result();
     $ongoingStmt->close();
 
-    $upcomingStmt = $conn->prepare("SELECT e.*, a.clubName FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.eventDate > ? AND e.status = 'approved' ORDER BY e.eventDate ASC");
+    $upcomingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE e.eventDate > ? AND e.status = 'approved' ORDER BY e.eventDate ASC");
     $upcomingStmt->bind_param("s", $currentDate);
     $upcomingStmt->execute();
     $upcomingResult = $upcomingStmt->get_result();
@@ -63,7 +63,7 @@
                 <img src="<?php echo htmlspecialchars($row['eventImage']); ?>" alt="Event image" style="width:100%;height:160px;object-fit:cover;display:block;">
             <?php endif; ?>
             <div class="card-body">
-                <span class="tag" data-color="<?php echo $color; ?>"><?php echo htmlspecialchars($row['clubName']); ?></span>
+                <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" style="text-decoration:none;"><span class="tag" data-color="<?php echo $color; ?>"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
                 <h3><?php echo htmlspecialchars($row['eventTitle']); ?></h3>
                 <div class="event-meta">
                     <div class="meta-row">
