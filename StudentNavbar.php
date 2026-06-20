@@ -38,21 +38,21 @@
 
         <div class="profile-dropdown">
             <span class="profile-name">
-                🔔<?php if ($notifCount > 0): ?><sup style="color:var(--red);font-weight:700;"><?php echo $notifCount; ?></sup><?php endif; ?>
+                🔔<?php if ($notifCount > 0): ?><sup class="notif-sup"><?php echo $notifCount; ?></sup><?php endif; ?>
                 👤 <?php echo htmlspecialchars($_SESSION['full_name']); ?>
             </span>
             <div class="dropdown-content notif-dropdown">
                 <?php if (!empty($notifications)): ?>
                     <?php foreach ($notifications as $n): ?>
-                        <a href="<?php echo !empty($n['eventID']) ? 'DetailedEvent.php?id=' . (int)$n['eventID'] : 'Clubs.php'; ?>" style="font-size:12px;white-space:normal;line-height:1.4;padding:10px 14px;border-bottom:1px solid #f1f5f9;text-decoration:none;display:block;">
+                        <a href="<?php echo !empty($n['eventID']) ? 'DetailedEvent.php?id=' . (int)$n['eventID'] : 'Clubs.php'; ?>" class="notif-link">
                             <?php echo htmlspecialchars($n['message']); ?>
-                            <br><small style="color:#94a3b8;"><?php echo date('d M h:i A', strtotime($n['created_at'])); ?></small>
+                            <br><small class="notif-time"><?php echo date('d M h:i A', strtotime($n['created_at'])); ?></small>
                         </a>
                     <?php endforeach; ?>
                 <?php else: ?>
-                    <a style="font-size:12px;color:#94a3b8;cursor:default;padding:14px;">No new notifications</a>
+                    <a class="notif-empty">No new notifications</a>
                 <?php endif; ?>
-                <hr style="border:0;border-top:1px solid var(--border,#e2e8f0);margin:4px 0;">
+                <hr class="notif-sep">
                 <a href="ProfileSettings.php">Profile</a>
                 <a href="Logout.php">Sign Out</a>
             </div>

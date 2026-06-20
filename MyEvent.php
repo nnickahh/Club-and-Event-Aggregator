@@ -95,11 +95,11 @@
                         <div class="card-body">
                             <span class="tag tag-confirmed">Event Confirmed</span>
                             <?php if (!empty($row['clubName'])): ?>
-                            <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" style="text-decoration:none;"><span class="tag"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
+                            <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="no-deco"><span class="tag"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
                             <?php endif; ?>
                             <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
                             <div class="card-meta">
-                                <?php echo date('d F Y', strtotime($row['eventDate'])); ?> |
+                                <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?> |
                                 <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?> |
                                 <?php echo htmlspecialchars($row['venue']); ?>
                             </div>

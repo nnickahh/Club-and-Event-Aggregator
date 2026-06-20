@@ -13,7 +13,7 @@
     // Fetch clubs for filter dropdown (only those with approved events)
     $clubsResult = $conn->query("SELECT DISTINCT a.clubName FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'approved' AND a.clubName IS NOT NULL ORDER BY a.clubName ASC");
 
-    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE e.eventDate = ? AND e.status = 'approved' ORDER BY e.eventTime ASC");
+    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE ? BETWEEN e.eventDate AND COALESCE(e.eventEndDate, e.eventDate) AND e.status = 'approved' ORDER BY e.eventTime ASC");
     $ongoingStmt->bind_param("s", $currentDate);
     $ongoingStmt->execute();
     $ongoingResult = $ongoingStmt->get_result();
@@ -60,15 +60,15 @@
                  data-registered="<?php echo $isRegistered ? '1' : '0'; ?>">
             <div class="card-stripe" data-color="<?php echo $color; ?>"></div>
             <?php if (!empty($row['eventImage'])): ?>
-                <img src="<?php echo htmlspecialchars($row['eventImage']); ?>" alt="Event image" style="width:100%;height:160px;object-fit:cover;display:block;">
+                <img src="<?php echo htmlspecialchars($row['eventImage']); ?>" alt="Event image" class="img-event-card">
             <?php endif; ?>
             <div class="card-body">
-                <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" style="text-decoration:none;"><span class="tag" data-color="<?php echo $color; ?>"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
+                <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="no-deco"><span class="tag" data-color="<?php echo $color; ?>"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
                 <h3><?php echo htmlspecialchars($row['eventTitle']); ?></h3>
                 <div class="event-meta">
                     <div class="meta-row">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-                        <?php echo date('d M Y, l', $eventDate); ?>
+                        <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?>
                     </div>
                     <div class="meta-row">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -133,7 +133,7 @@
         <p class="section-label" id="resultCount"><?php echo $totalEvents; ?> event<?php echo $totalEvents !== 1 ? 's' : ''; ?> found</p>
 
         <?php if ($ongoingResult->num_rows > 0): ?>
-            <p class="section-label" style="font-size:15px;margin-top:24px;color:#b91c1c;">Ongoing Events</p>
+            <p class="section-label text-danger mt-24">Ongoing Events</p>
             <section class="event-grid ongoing-section">
                 <?php while ($row = $ongoingResult->fetch_assoc()): ?>
                     <?php echo renderEventCard($row, $colors, in_array($row['eventID'], $registeredIDs)); ?>
@@ -141,7 +141,7 @@
             </section>
         <?php endif; ?>
 
-        <p class="section-label" style="font-size:15px;margin-top:<?php echo $ongoingResult->num_rows > 0 ? '32px' : '24px'; ?>;">Upcoming Events</p>
+        <p class="section-label <?php echo $ongoingResult->num_rows > 0 ? 'mt-32' : 'mt-24'; ?>">Upcoming Events</p>
 
         <section class="event-grid" id="eventGrid">
             <?php

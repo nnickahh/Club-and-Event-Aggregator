@@ -111,10 +111,10 @@
     $ongoingEvents = [];
     $upcomingEvents = [];
     foreach ($allEvents as $ev) {
-        if ($ev['status'] === 'approved' && $ev['eventDate'] == $currentDate) {
-            $ongoingEvents[] = $ev;
-        } elseif ($ev['status'] === 'approved' && $ev['eventDate'] > $currentDate) {
-            $upcomingEvents[] = $ev;
+        if ($ev['status'] === 'approved') {
+            $p = getEventPeriod($ev['eventDate'], $ev['eventEndDate'] ?? null, $currentDate);
+            if ($p === 'ongoing') $ongoingEvents[] = $ev;
+            elseif ($p === 'upcoming') $upcomingEvents[] = $ev;
         }
     }
 
@@ -167,7 +167,7 @@
         <a href="ModeratorClubs.php" class="back-link">&larr; Back to Clubs</a>
 
         <?php if ($message): ?>
-            <div style="padding:14px 18px;border-radius:var(--radius-md);margin-bottom:20px;font-weight:500;font-size:14px;background:<?php echo $msgType === 'success' ? 'var(--green-bg)' : 'var(--red-light)'; ?>;color:<?php echo $msgType === 'success' ? 'var(--green)' : 'var(--red)'; ?>;border:1px solid <?php echo $msgType === 'success' ? 'rgba(45,125,70,0.2)' : 'rgba(237,28,36,0.2)'; ?>;">
+            <div class="msg-banner" style="background:<?php echo $msgType === 'success' ? 'var(--green-bg)' : 'var(--red-light)'; ?>;color:<?php echo $msgType === 'success' ? 'var(--green)' : 'var(--red)'; ?>;border:1px solid <?php echo $msgType === 'success' ? 'rgba(45,125,70,0.2)' : 'rgba(237,28,36,0.2)'; ?>;">
                 <?php echo htmlspecialchars($message); ?>
             </div>
         <?php endif; ?>
@@ -179,9 +179,9 @@
             <div class="brand-identity-flex">
                 <div class="avatar-uploader-wrapper">
                     <?php if ($clubPic): ?>
-                        <img src="<?php echo $clubPic; ?>" class="brand-avatar-img" alt="<?php echo $clubName; ?>" onclick="openViewer(this.src)" style="cursor:pointer;">
+                        <img src="<?php echo $clubPic; ?>" class="brand-avatar-img cursor-pointer" alt="<?php echo $clubName; ?>" onclick="openViewer(this.src)">
                     <?php else: ?>
-                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:32px;background:#fef2f2;">🏆</div>
+                        <div class="avatar-fallback">🏆</div>
                     <?php endif; ?>
                 </div>
                 <div class="brand-meta-details-wrapper">
@@ -204,9 +204,9 @@
                     <button type="button" class="btn-modern-secondary hide-on-edit" onclick="enableEditingMode()">✏️ Edit Club</button>
                     <button type="button" class="btn-modern-cancel show-on-edit" onclick="disableEditingMode()">Cancel</button>
                     <button type="submit" class="btn-modern-primary show-on-edit">💾 Save Changes</button>
-                    <form method="POST" onsubmit="return confirm('Are you sure you want to decline this club registration?');" style="display:inline;">
+                    <form method="POST" onsubmit="return confirm('Are you sure you want to decline this club registration?');" class="flex-inline">
                         <input type="hidden" name="action" value="decline">
-                        <button type="submit" style="padding:8px 20px;background:#fff;color:var(--red);border:1.5px solid var(--red);border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;">Decline Club</button>
+                        <button type="submit" class="btn-decline-outline">Decline Club</button>
                     </form>
                 </div>
             <?php else: ?>
@@ -214,9 +214,9 @@
                     <button type="button" class="btn-modern-secondary hide-on-edit" onclick="enableEditingMode()">✏️ Edit Club</button>
                     <button type="button" class="btn-modern-cancel show-on-edit" onclick="disableEditingMode()">Cancel</button>
                     <button type="submit" class="btn-modern-primary show-on-edit">💾 Save Changes</button>
-                    <form method="POST" onsubmit="return confirm('Delete this entire club and all its data? This cannot be undone.');" style="display:inline;">
+                    <form method="POST" onsubmit="return confirm('Delete this entire club and all its data? This cannot be undone.');" class="flex-inline">
                         <input type="hidden" name="action" value="delete">
-                        <button type="submit" style="padding:8px 20px;background:#fff;color:var(--red);border:1.5px solid var(--red);border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;">🗑️ Delete Club</button>
+                        <button type="submit" class="btn-decline-outline">🗑️ Delete Club</button>
                     </form>
                 </div>
             <?php endif; ?>
@@ -256,7 +256,7 @@
                     </div>
                     <div class="form-group-modern">
                         <label>Admin ID</label>
-                        <input type="text" value="<?php echo $adminIDVal; ?>" readonly style="background:#f8fafc;">
+                        <input type="text" value="<?php echo $adminIDVal; ?>" readonly class="input-readonly-bg">
                     </div>
                     <div class="form-group-modern">
                         <label>Social Media & Other Contacts</label>
@@ -277,15 +277,20 @@
                     <?php foreach($ongoingEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
                                 <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
                             </div>
                             <div class="strip-actions">
-                                <a href="EventDetailsModerator.php?id=<?php echo (int)$ev['eventID']; ?>" class="action-pill-btn" style="text-decoration:none;">View Details</a>
+                                <a href="EventDetailsModerator.php?id=<?php echo (int)$ev['eventID']; ?>" class="action-pill-btn pill-btn-no-deco">View Details</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -293,22 +298,27 @@
             <?php endif; ?>
 
             <?php if (!empty($upcomingEvents)): ?>
-                <div class="section-flex-header" style="<?php echo !empty($ongoingEvents) ? 'margin-top:24px;' : ''; ?>">
+                <div class="section-flex-header <?php echo !empty($ongoingEvents) ? 'cond-mt' : ''; ?>">
                     <h3>Upcoming Events</h3>
                 </div>
                 <div class="modern-events-list">
                     <?php foreach($upcomingEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
                                 <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
                             </div>
                             <div class="strip-actions">
-                                <a href="EventDetailsModerator.php?id=<?php echo (int)$ev['eventID']; ?>" class="action-pill-btn" style="text-decoration:none;">View Details</a>
+                                <a href="EventDetailsModerator.php?id=<?php echo (int)$ev['eventID']; ?>" class="action-pill-btn pill-btn-no-deco">View Details</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -348,7 +358,7 @@
                                     <td class="user-cell-name"><strong><?php echo htmlspecialchars($memb['name']); ?></strong></td>
                                     <td><a href="mailto:<?php echo htmlspecialchars($memb['email']); ?>" class="email-link"><?php echo htmlspecialchars($memb['email']); ?></a></td>
                                     <td>
-                                        <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:<?php echo $memb['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $memb['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
+                                        <span class="badge-role-tag" style="background:<?php echo $memb['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $memb['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
                                             <?php echo htmlspecialchars($memb['role']); ?>
                                         </span>
                                     </td>

@@ -80,7 +80,7 @@
             <a href="ModeratorDashboard.php" class="btn-primary">Back to Dashboard</a>
 
         <?php else: ?>
-            <div class="success-icon" style="color: var(--red);">✕</div>
+            <div class="success-icon text-danger">✕</div>
             
             <h2>Processing Error</h2>
 

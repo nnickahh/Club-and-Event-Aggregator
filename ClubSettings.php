@@ -122,11 +122,12 @@
     while($ev = $eventsResult->fetch_assoc()) {
         if ($ev['status'] === 'pending') {
             $pendingEvents[] = $ev;
-        } elseif ($ev['status'] === 'approved' && $ev['eventDate'] == $currentDate) {
-            $ongoingEvents[] = $ev;
-        } elseif ($ev['status'] === 'approved' && $ev['eventDate'] > $currentDate) {
-            $upcomingEvents[] = $ev;
-        } elseif (($ev['status'] === 'approved' && $ev['eventDate'] < $currentDate) || $ev['status'] === 'ended') {
+        } elseif ($ev['status'] === 'approved') {
+            $p = getEventPeriod($ev['eventDate'], $ev['eventEndDate'] ?? null, $currentDate);
+            if ($p === 'ongoing') $ongoingEvents[] = $ev;
+            elseif ($p === 'upcoming') $upcomingEvents[] = $ev;
+            else $completedEvents[] = $ev;
+        } elseif ($ev['status'] === 'ended') {
             $completedEvents[] = $ev;
         } elseif ($ev['status'] === 'cancelled') {
             $cancelledEvents[] = $ev;
@@ -185,9 +186,9 @@
             <div class="profile-brand-card">
                 <div class="brand-identity-flex">
                     <div class="avatar-uploader-wrapper">
-                        <img src="<?php echo !empty($profilePic) ? htmlspecialchars($profilePic) . '?t=' . time() : 'Image/default-club.png'; ?>" class="brand-avatar-img" alt="Club Logo" onclick="openAvatarViewer(this.src)" style="cursor:pointer;">
+                        <img src="<?php echo !empty($profilePic) ? htmlspecialchars($profilePic) . '?t=' . time() : 'Image/default-club.png'; ?>" class="brand-avatar-img cursor-pointer" alt="Club Logo" onclick="openAvatarViewer(this.src)">
                         <label class="avatar-edit-overlay" for="profilePicInput">📸</label>
-                        <input type="file" name="profilePic" id="profilePicInput" accept="image/*" style="display:none;">
+                        <input type="file" name="profilePic" id="profilePicInput" accept="image/*" class="hide-input">
                     </div>
                     <div class="brand-meta-details-wrapper">
                         <span class="badge-role">OFFICIAL CLUB</span>
@@ -261,8 +262,13 @@
                     <?php foreach($ongoingEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
@@ -277,15 +283,20 @@
             <?php endif; ?>
 
             <?php if (!empty($upcomingEvents)): ?>
-                <div class="section-flex-header" style="<?php echo !empty($ongoingEvents) ? 'margin-top:24px;' : ''; ?>">
+                <div class="section-flex-header <?php echo !empty($ongoingEvents) ? 'cond-mt' : ''; ?>">
                     <h3>Upcoming Events</h3>
                 </div>
                 <div class="modern-events-list">
                     <?php foreach($upcomingEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
@@ -300,15 +311,20 @@
             <?php endif; ?>
 
             <?php if (!empty($pendingEvents)): ?>
-                <div class="section-flex-header" style="<?php echo !empty($ongoingEvents) || !empty($upcomingEvents) ? 'margin-top:24px;' : ''; ?>">
+                <div class="section-flex-header <?php echo !empty($ongoingEvents) || !empty($upcomingEvents) ? 'cond-mt' : ''; ?>">
                     <h3>Pending Events</h3>
                 </div>
                 <div class="modern-events-list">
                     <?php foreach($pendingEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
@@ -323,15 +339,20 @@
             <?php endif; ?>
 
             <?php if (!empty($completedEvents)): ?>
-                <div class="section-flex-header" style="<?php echo !empty($ongoingEvents) || !empty($upcomingEvents) || !empty($pendingEvents) ? 'margin-top:24px;' : ''; ?>">
+                <div class="section-flex-header <?php echo !empty($ongoingEvents) || !empty($upcomingEvents) || !empty($pendingEvents) ? 'cond-mt' : ''; ?>">
                     <h3>Completed Events</h3>
                 </div>
                 <div class="modern-events-list">
                     <?php foreach($completedEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
@@ -346,15 +367,20 @@
             <?php endif; ?>
 
             <?php if (!empty($cancelledEvents)): ?>
-                <div class="section-flex-header" style="margin-top:24px;">
+                <div class="section-flex-header cond-mt">
                     <h3>Cancelled Events</h3>
                 </div>
                 <div class="modern-events-list">
                     <?php foreach($cancelledEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
@@ -403,7 +429,7 @@
                                     <td class="user-cell-name"><strong><?php echo htmlspecialchars($memb['name']); ?></strong></td>
                                     <td><a href="mailto:<?php echo htmlspecialchars($memb['email']); ?>" class="email-link"><?php echo htmlspecialchars($memb['email']); ?></a></td>
                                     <td>
-                                        <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:<?php echo $memb['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $memb['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
+                                        <span class="badge-role-tag" style="background:<?php echo $memb['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $memb['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
                                             <?php echo htmlspecialchars($memb['role']); ?>
                                         </span>
                                     </td>

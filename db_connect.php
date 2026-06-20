@@ -168,6 +168,16 @@
         error_log('DB status ENUM migration error: ' . $e->getMessage());
     }
 
+    // Add `eventEndDate` column to `events` table (for multi-day events)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'eventEndDate'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN eventEndDate DATE DEFAULT NULL AFTER eventDate");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB eventEndDate migration error: ' . $e->getMessage());
+    }
+
     // Add `socialMedia` column to `clubs` table if it doesn't exist (for club social links)
     try {
         $check = $conn->query("SHOW COLUMNS FROM clubs LIKE 'socialMedia'");
@@ -249,4 +259,26 @@
     } catch (mysqli_sql_exception $e) {
         error_log('DB student_notifications table creation error: ' . $e->getMessage());
     }
+
+// ─── Helper functions ──────────────────────────────────────
+
+function formatDateRange($eventDate, $eventEndDate = null) {
+    $end = $eventEndDate ?? $eventDate;
+    if ($end === $eventDate) {
+        return date('d M Y', strtotime($eventDate));
+    }
+    $s = strtotime($eventDate);
+    $e = strtotime($end);
+    if (date('m Y', $s) === date('m Y', $e)) {
+        return date('j', $s) . ' - ' . date('j M Y', $e);
+    }
+    return date('j M', $s) . ' - ' . date('j M Y', $e);
+}
+
+function getEventPeriod($eventDate, $eventEndDate, $currentDate) {
+    $end = $eventEndDate ?: $eventDate;
+    if ($currentDate >= $eventDate && $currentDate <= $end) return 'ongoing';
+    if ($currentDate < $eventDate) return 'upcoming';
+    return 'past';
+}
 ?>

@@ -10,8 +10,8 @@
 
     $currentDate = date('Y-m-d');
 
-    // Fetch ongoing events (today)
-    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE e.eventDate = ? AND e.status = 'approved' ORDER BY e.eventTime ASC LIMIT 4");
+    // Fetch ongoing events (today or multi-day range covering today)
+    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE ? BETWEEN e.eventDate AND COALESCE(e.eventEndDate, e.eventDate) AND e.status = 'approved' ORDER BY e.eventTime ASC LIMIT 4");
     $ongoingStmt->bind_param("s", $currentDate);
     $ongoingStmt->execute();
     $ongoingResult = $ongoingStmt->get_result();
@@ -48,15 +48,15 @@
                  data-date="<?php echo $row['eventDate']; ?>">
             <div class="card-stripe" data-color="<?php echo $color; ?>"></div>
             <?php if (!empty($row['eventImage'])): ?>
-                <img src="<?php echo htmlspecialchars($row['eventImage']); ?>" alt="Event image" style="width:100%;height:160px;object-fit:cover;display:block;">
+                <img src="<?php echo htmlspecialchars($row['eventImage']); ?>" alt="Event image" class="img-event-card">
             <?php endif; ?>
             <div class="card-body">
-                <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" style="text-decoration:none;"><span class="tag" data-color="<?php echo $color; ?>"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
+                <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="no-deco"><span class="tag" data-color="<?php echo $color; ?>"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
                 <h3><?php echo htmlspecialchars($row['eventTitle']); ?></h3>
                 <div class="event-meta">
                     <div class="meta-row">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-                        <?php echo date('d M Y, l', $eventDate); ?>
+                        <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?>
                     </div>
                     <div class="meta-row">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -97,11 +97,11 @@
                 <p class="dash-sub">Browse upcoming activities from your clubs and faculties. <br>RSVP to reserve your spot.</p>
             </div>
             <div class="dash-stats">
-                <a href="MyEvent.php?tab=events" class="stat-pill" style="text-decoration:none;color:inherit;">
+                <a href="MyEvent.php?tab=events" class="stat-pill no-deco stat-link-inherit">
                     <div class="num"><?php echo $rsvpCount; ?></div>
                     <div class="lbl">My Events</div>
                 </a>
-                <a href="MyEvent.php?tab=clubs" class="stat-pill" style="text-decoration:none;color:inherit;">
+                <a href="MyEvent.php?tab=clubs" class="stat-pill no-deco stat-link-inherit">
                     <div class="num"><?php echo $clubCount; ?></div>
                     <div class="lbl">My Clubs</div>
                 </a>
@@ -111,27 +111,27 @@
 
     <main class="container">
 
-        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:32px;">
-            <a href="StudentEvents.php" class="btn-primary btn-action-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;width:auto;padding:12px 24px;">
+        <div class="flex-center-gap12">
+            <a href="StudentEvents.php" class="btn-primary btn-action-btn no-deco btn-action-wide">
                 <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:white;fill:none;stroke-width:2;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
                 Browse Events
             </a>
-            <a href="Clubs.php" class="btn-primary btn-action-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;width:auto;padding:12px 24px;background:var(--blue);">
+            <a href="Clubs.php" class="btn-primary btn-action-btn no-deco btn-action-wide" style="background:var(--blue);">
                 <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:white;fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
                 Explore Clubs
             </a>
-            <a href="Calendar.php" class="btn-primary btn-action-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;width:auto;padding:12px 24px;background:var(--purple);">
+            <a href="Calendar.php" class="btn-primary btn-action-btn no-deco btn-action-wide" style="background:var(--purple);">
                 <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:white;fill:none;stroke-width:2;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
                 Calendar
             </a>
-            <a href="MyEvent.php" class="btn-primary btn-action-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;width:auto;padding:12px 24px;background:var(--green);">
+            <a href="MyEvent.php" class="btn-primary btn-action-btn no-deco btn-action-wide" style="background:var(--green);">
                 <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:white;fill:none;stroke-width:2;"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
                 My Activities
             </a>
         </div>
 
         <?php if ($ongoingResult->num_rows > 0): ?>
-            <p class="section-label" style="color:#b91c1c;">Ongoing Events</p>
+            <p class="section-label text-danger">Ongoing Events</p>
             <section class="event-grid">
                 <?php while ($row = $ongoingResult->fetch_assoc()): ?>
                     <?php echo renderEventCard($row, $colors); ?>
@@ -139,7 +139,7 @@
             </section>
         <?php endif; ?>
 
-        <p class="section-label" style="margin-top:<?php echo $ongoingResult->num_rows > 0 ? '32px' : '0'; ?>">Upcoming Events</p>
+        <p class="section-label <?php echo $ongoingResult->num_rows > 0 ? 'mt-32' : ''; ?>">Upcoming Events</p>
 
         <section class="event-grid">
             <?php

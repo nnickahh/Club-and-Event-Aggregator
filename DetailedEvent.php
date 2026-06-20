@@ -60,13 +60,13 @@
         
         <article class="event-detail-card">
             <?php if (!empty($event['eventImage'])): ?>
-                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;max-height:320px;object-fit:cover;border-radius:8px;margin-bottom:20px;">
+                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" class="img-event-detail">
             <?php endif; ?>
-            <a href="ClubsDetails.php?id=<?php echo (int)($event['clubID'] ?? 0); ?>" style="text-decoration:none;"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? $event['clubName'] ?? 'Club'); ?></span></a>
+            <a href="ClubsDetails.php?id=<?php echo (int)($event['clubID'] ?? 0); ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? $event['clubName'] ?? 'Club'); ?></span></a>
             <h1 class="event-detail-title"><?php echo htmlspecialchars($event['eventTitle']); ?></h1>
             
             <div class="event-meta event-meta-lg">
-                <p><strong>Date:</strong> <?php echo date('d F Y', strtotime($event['eventDate'])); ?></p>
+                <p><strong>Date:</strong> <?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?></p>
                 <p><strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></p>
                 <p><strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?></p>
                 <p><strong>Fee:</strong> <?php echo $fee > 0 ? 'RM' . number_format($fee, 2) : 'Free'; ?></p>
@@ -86,23 +86,23 @@
                 $methods = explode(',', $event['payment_methods']);
                 $labels = ['cash'=>'Cash', 'tng'=>'TNG (Touch \'n Go)', 'bank_in'=>'Bank In'];
                 ?>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <div class="flex-row mb-12">
                     <?php foreach ($methods as $m): ?>
-                        <span style="background:#f1f5f9;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;"><?php echo $labels[trim($m)] ?? trim($m); ?></span>
+                        <span class="payment-tag"><?php echo $labels[trim($m)] ?? trim($m); ?></span>
                     <?php endforeach; ?>
                 </div>
                 <?php if (in_array('tng', $methods) && (!empty($event['tng_phone']) || !empty($event['tng_qr']))): ?>
-                    <div style="padding:14px;background:#f0f9ff;border-radius:8px;font-size:13px;margin-bottom:12px;">
-                        <strong style="color:#0369a1;">TNG Details</strong><br>
+                    <div class="payment-box">
+                        <strong>TNG Details</strong><br>
                         <?php if (!empty($event['tng_phone'])): ?>Phone: <?php echo htmlspecialchars($event['tng_phone']); ?><br><?php endif; ?>
-                        <?php if (!empty($event['tng_qr'])): ?><img src="<?php echo htmlspecialchars($event['tng_qr']); ?>" style="max-width:160px;margin-top:6px;border-radius:6px;"><?php endif; ?>
+                        <?php if (!empty($event['tng_qr'])): ?><img src="<?php echo htmlspecialchars($event['tng_qr']); ?>" class="img-tng-qr"><?php endif; ?>
                     </div>
                 <?php endif; ?>
                 <?php if (in_array('bank_in', $methods) && !empty($event['bank_details'])): ?>
                     <?php $bankData = json_decode($event['bank_details'], true); ?>
                     <?php if ($bankData): ?>
-                    <div style="padding:14px;background:#f0f9ff;border-radius:8px;font-size:13px;margin-bottom:12px;">
-                        <strong style="color:#0369a1;">Bank In Details</strong><br>
+                    <div class="payment-box">
+                        <strong>Bank In Details</strong><br>
                         <?php if (!empty($bankData['bank_name'])): ?>Bank: <?php echo htmlspecialchars($bankData['bank_name']); ?><br><?php endif; ?>
                         <?php if (!empty($bankData['bank_account'])): ?>Account: <?php echo htmlspecialchars($bankData['bank_account']); ?><br><?php endif; ?>
                         <?php if (!empty($bankData['bank_holder'])): ?>Holder: <?php echo htmlspecialchars($bankData['bank_holder']); ?><?php endif; ?>
@@ -111,22 +111,22 @@
                 <?php endif; ?>
                 <?php endif; ?>
             <?php if ($alreadyRegistered): ?>
-                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px;text-align:center;margin-top:24px;">
-                    <span style="font-size:16px;font-weight:700;color:#16a34a;">✓ You are registered for this event</span>
+                <div class="registered-banner">
+                    <span class="registered-text">✓ You are registered for this event</span>
                 </div>
-                <div style="text-align:center;margin-top:12px;">
+                <div class="text-center mt-12">
                     <form action="CancelRegistration.php" method="POST" onsubmit="return confirm('Cancel your registration for this event?');">
                         <input type="hidden" name="eventID" value="<?php echo $event['eventID']; ?>">
-                        <button type="submit" class="btn-primary btn-cancel" style="background:#dc2626;font-size:13px;padding:8px 18px;">Cancel Registration</button>
+                        <button type="submit" class="btn-primary btn-cancel btn-primary-sm">Cancel Registration</button>
                     </form>
                 </div>
             <?php else: ?>
                 <form action="RegisterEvent.php" method="POST">
                     <input type="hidden" name="event_id" value="<?php echo $event['eventID']; ?>">
-                    <div style="margin-bottom:16px;">
+                    <div class="mb-16">
                         <?php if ($fee > 0 && !empty($event['payment_methods'])): ?>
-                        <label style="font-size:14px;font-weight:600;display:block;margin-bottom:6px;">Payment Method</label>
-                        <select name="payment_method" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:14px;box-sizing:border-box;">
+                        <label class="form-label-md">Payment Method</label>
+                        <select name="payment_method" class="form-select">
                             <option value="">Select payment method</option>
                             <?php
                             $methods = explode(',', $event['payment_methods']);
@@ -147,31 +147,31 @@
     </main>
 
     <?php if ($showCancelPopup): ?>
-    <div class="logout-modal-overlay" style="display:flex;">
-        <div class="logout-modal-box" style="text-align:center;padding:40px 36px;">
-            <div style="width:56px;height:56px;border-radius:50%;background:#fef2f2;color:#dc2626;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;margin:0 auto 16px;">✕</div>
-            <h3 style="margin:0 0 8px;font-size:18px;">Registration Cancelled</h3>
-            <p style="font-size:14px;color:#666;margin:0 0 24px;">Your registration for this event has been cancelled.</p>
-            <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary" style="padding:10px 32px;border:none;cursor:pointer;">OK</button>
+    <div class="logout-modal-overlay">
+        <div class="logout-modal-box modal-content-center">
+            <div class="modal-icon-error">✕</div>
+            <h3 class="modal-title">Registration Cancelled</h3>
+            <p class="modal-text">Your registration for this event has been cancelled.</p>
+            <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary modal-btn">OK</button>
         </div>
     </div>
     <?php elseif ($showCancelError): ?>
-    <div class="logout-modal-overlay" style="display:flex;">
-        <div class="logout-modal-box" style="text-align:center;padding:40px 36px;">
-            <div style="width:56px;height:56px;border-radius:50%;background:#fef2f2;color:#dc2626;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;margin:0 auto 16px;">!</div>
-            <h3 style="margin:0 0 8px;font-size:18px;">Cancellation Failed</h3>
-            <p style="font-size:14px;color:#666;margin:0 0 24px;">Something went wrong. Please try again.</p>
-            <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary" style="padding:10px 32px;border:none;cursor:pointer;">OK</button>
+    <div class="logout-modal-overlay">
+        <div class="logout-modal-box modal-content-center">
+            <div class="modal-icon-error">!</div>
+            <h3 class="modal-title">Cancellation Failed</h3>
+            <p class="modal-text">Something went wrong. Please try again.</p>
+            <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary modal-btn">OK</button>
         </div>
     </div>
     <?php endif; ?>
     <?php if ($showPopup): ?>
-    <div class="logout-modal-overlay" style="display:flex;">
-        <div class="logout-modal-box" style="text-align:center;padding:40px 36px;">
-            <div style="width:56px;height:56px;border-radius:50%;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;margin:0 auto 16px;">✓</div>
-            <h3 style="margin:0 0 8px;font-size:18px;">Registered Successfully!</h3>
-            <p style="font-size:14px;color:#666;margin:0 0 24px;">You have successfully registered for this event.</p>
-            <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary" style="padding:10px 32px;border:none;cursor:pointer;">OK</button>
+    <div class="logout-modal-overlay">
+        <div class="logout-modal-box modal-content-center">
+            <div class="modal-icon-success">✓</div>
+            <h3 class="modal-title">Registered Successfully!</h3>
+            <p class="modal-text">You have successfully registered for this event.</p>
+            <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary modal-btn">OK</button>
         </div>
     </div>
     <?php endif; ?>

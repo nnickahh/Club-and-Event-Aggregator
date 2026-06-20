@@ -64,13 +64,14 @@
             } elseif ($action === 'update') {
                 $title = $_POST['eventTitle'] ?? '';
                 $date = $_POST['eventDate'] ?? '';
+                $endDate = !empty(trim($_POST['eventEndDate'] ?? '')) ? trim($_POST['eventEndDate']) : null;
                 $time = $_POST['eventTime'] ?? '';
                 $endTime = !empty(trim($_POST['eventEndTime'] ?? '')) ? trim($_POST['eventEndTime']) : null;
                 $venue = $_POST['venue'] ?? '';
                 $capacity = $_POST['capacity'] ?? 0;
                 $description = $_POST['description'] ?? '';
-                $stmt = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=? WHERE eventID=?");
-                $stmt->bind_param("sssssisi", $title, $date, $time, $endTime, $venue, $capacity, $description, $eventID);
+                $stmt = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=? WHERE eventID=?");
+                $stmt->bind_param("ssssssisi", $title, $date, $endDate, $time, $endTime, $venue, $capacity, $description, $eventID);
                 $stmt->execute();
                 $message = 'Event has been updated successfully.';
                 $msgType = 'success';
@@ -130,26 +131,27 @@
         <a href="ModeratorEvents.php" class="back-link">&larr; Back to Events</a>
 
         <?php if ($message): ?>
-            <div style="padding:14px 18px;border-radius:var(--radius-md);margin-bottom:20px;font-weight:500;font-size:14px;background:<?php echo $msgType === 'success' ? 'var(--green-bg)' : 'var(--red-light)'; ?>;color:<?php echo $msgType === 'success' ? 'var(--green)' : 'var(--red)'; ?>;border:1px solid <?php echo $msgType === 'success' ? 'rgba(45,125,70,0.2)' : 'rgba(237,28,36,0.2)'; ?>;">
+            <div class="msg-banner" style="background:<?php echo $msgType === 'success' ? 'var(--green-bg)' : 'var(--red-light)'; ?>;color:<?php echo $msgType === 'success' ? 'var(--green)' : 'var(--red)'; ?>;border:1px solid <?php echo $msgType === 'success' ? 'rgba(45,125,70,0.2)' : 'rgba(237,28,36,0.2)'; ?>;">
                 <?php echo htmlspecialchars($message); ?>
             </div>
         <?php endif; ?>
 
         <article class="event-detail-card">
             <?php if (!empty($event['eventImage'])): ?>
-                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;max-height:320px;object-fit:cover;border-radius:8px;margin-bottom:20px;">
+                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" class="img-event-detail">
             <?php endif; ?>
-            <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" style="text-decoration:none;"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
+            <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
 
             <?php if ($eventStatus === 'pending'): ?>
-                <span class="mod-pending-badge" style="display:inline-flex;margin-top:10px;"><span class="mod-badge-dot"></span>Pending review</span>
+                <span class="mod-pending-badge mt-10"><span class="mod-badge-dot"></span>Pending review</span>
             <?php elseif ($eventStatus === 'declined'): ?>
-                <span class="mod-status-tag declined" style="display:inline-flex;margin-top:10px;">Declined</span>
+                <span class="mod-status-tag declined mt-10">Declined</span>
             <?php else: ?>
-                <span class="mod-status-tag approved" style="display:inline-flex;margin-top:10px;">
+                <span class="mod-status-tag approved mt-10">
                     <?php
-                        if ($event['eventDate'] === $today) echo 'Ongoing';
-                        elseif ($event['eventDate'] > $today) echo 'Upcoming';
+                        $p = getEventPeriod($event['eventDate'], $event['eventEndDate'] ?? null, $today);
+                        if ($p === 'ongoing') echo 'Ongoing';
+                        elseif ($p === 'upcoming') echo 'Upcoming';
                         else echo 'Completed';
                     ?>
                 </span>
@@ -167,6 +169,11 @@
                     <div class="mod-form-group">
                         <label>Date</label>
                         <input type="date" name="eventDate" value="<?php echo htmlspecialchars($event['eventDate']); ?>" required>
+                    </div>
+                    <div class="mod-form-group">
+                        <label>End Date</label>
+                        <input type="date" name="eventEndDate" value="<?php echo htmlspecialchars($event['eventEndDate'] ?? ''); ?>">
+                        <small class="text-xs-muted-alt">Leave blank for single-day event.</small>
                     </div>
 
                     <div class="mod-form-group">
@@ -195,14 +202,14 @@
 
                     <div class="mod-detail-actions">
                         <button type="submit" class="btn-save">Save Changes</button>
-                        <a href="EventDetailsModerator.php?id=<?php echo $eventID; ?>" class="btn-decline" style="text-align:center;text-decoration:none;">Cancel</a>
+                        <a href="EventDetailsModerator.php?id=<?php echo $eventID; ?>" class="btn-decline no-deco">Cancel</a>
                     </div>
                 </form>
             <?php else: ?>
                 <h1 class="event-detail-title"><?php echo htmlspecialchars($event['eventTitle']); ?></h1>
 
                 <div class="event-meta event-meta-lg">
-                    <p><strong>Date:</strong> <?php echo date('d F Y', strtotime($event['eventDate'])); ?></p>
+                    <p><strong>Date:</strong> <?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?></p>
                     <p><strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></p>
                     <p><strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?></p>
                     <p><strong>Capacity:</strong> <?php echo htmlspecialchars($event['capacity']); ?> seats</p>
@@ -223,17 +230,17 @@
                             ?>
                         </p>
                         <?php if (in_array('tng', $methods) && (!empty($event['tng_phone']) || !empty($event['tng_qr']))): ?>
-                            <div style="margin-top:8px;padding:10px 14px;background:#f0f9ff;border-radius:8px;font-size:13px;">
-                                <strong style="color:#0369a1;">TNG Details</strong><br>
+                            <div class="payment-box" style="margin-top:8px;">
+                                <strong>TNG Details</strong><br>
                                 <?php if (!empty($event['tng_phone'])): ?>Phone: <?php echo htmlspecialchars($event['tng_phone']); ?><br><?php endif; ?>
-                                <?php if (!empty($event['tng_qr'])): ?><img src="<?php echo htmlspecialchars($event['tng_qr']); ?>" style="max-width:150px;margin-top:6px;border-radius:6px;"><?php endif; ?>
+                                <?php if (!empty($event['tng_qr'])): ?><img src="<?php echo htmlspecialchars($event['tng_qr']); ?>" class="img-tng-qr"><?php endif; ?>
                             </div>
                         <?php endif; ?>
                         <?php if (in_array('bank_in', $methods) && !empty($event['bank_details'])): ?>
                             <?php $bankData = json_decode($event['bank_details'], true); ?>
                             <?php if ($bankData): ?>
-                            <div style="margin-top:8px;padding:10px 14px;background:#f0f9ff;border-radius:8px;font-size:13px;">
-                                <strong style="color:#0369a1;">Bank In Details</strong><br>
+                            <div class="payment-box" style="margin-top:8px;">
+                                <strong>Bank In Details</strong><br>
                                 <?php if (!empty($bankData['bank_name'])): ?>Bank: <?php echo htmlspecialchars($bankData['bank_name']); ?><br><?php endif; ?>
                                 <?php if (!empty($bankData['bank_account'])): ?>Account: <?php echo htmlspecialchars($bankData['bank_account']); ?><br><?php endif; ?>
                                 <?php if (!empty($bankData['bank_holder'])): ?>Holder: <?php echo htmlspecialchars($bankData['bank_holder']); ?><?php endif; ?>

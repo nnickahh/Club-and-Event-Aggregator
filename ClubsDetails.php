@@ -46,9 +46,10 @@
     $upcomingEvents = [];
     $completedEvents = [];
     foreach ($allEvents as $ev) {
-        if ($ev['eventDate'] == $currentDate) {
+        $p = getEventPeriod($ev['eventDate'], $ev['eventEndDate'] ?? null, $currentDate);
+        if ($p === 'ongoing') {
             $ongoingEvents[] = $ev;
-        } elseif ($ev['eventDate'] > $currentDate) {
+        } elseif ($p === 'upcoming') {
             $upcomingEvents[] = $ev;
         } else {
             $completedEvents[] = $ev;
@@ -174,52 +175,52 @@
         <a href="Clubs.php" class="back-link">&larr; Back to Clubs</a>
 
         <!-- Profile brand card -->
-        <div class="profile-brand-card" style="margin-top:16px;">
+        <div class="profile-brand-card mt-16">
             <div class="brand-identity-flex">
-                <div class="avatar-uploader-wrapper" style="cursor:default;">
+                <div class="avatar-uploader-wrapper cursor-default">
                     <?php if ($profilePic): ?>
-                        <img src="<?php echo $profilePic; ?>" class="brand-avatar-img" alt="<?php echo $clubName; ?>" onclick="openClubViewer(this.src)" style="cursor:pointer;">
+                        <img src="<?php echo $profilePic; ?>" class="brand-avatar-img" alt="<?php echo $clubName; ?>" onclick="openClubViewer(this.src)" class="cursor-pointer">
                     <?php else: ?>
-                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:32px;background:#fef2f2;">🏆</div>
+                        <div class="avatar-fallback">🏆</div>
                     <?php endif; ?>
                 </div>
                 <div class="brand-meta-details-wrapper">
                     <span class="badge-role"><?php echo $category; ?></span>
                     <div class="title-field-container">
-                        <h1 style="font-size:26px;font-weight:700;margin:4px 0;color:var(--premium-ink-dark);"><?php echo $clubName; ?></h1>
+                        <h1 class="club-detail-h1"><?php echo $clubName; ?></h1>
                     </div>
-                    <p class="meta-subline" style="margin:0;">📍 INTI International University</p>
-                    <div style="margin-top:10px;">
+                    <p class="meta-subline club-meta-m0">📍 INTI International University</p>
+                    <div class="mt-10">
                         <?php if ($isMember): ?>
-                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                                <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;">✓ Joined</span>
-                                <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to quit this club?');">
-                                    <button type="submit" name="quit_club" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='#dc2626';this.style.color='#dc2626'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#64748b'">Quit Club</button>
+                            <div class="flex-row">
+                                <span class="badge-joined">✓ Joined</span>
+                                <form method="POST" class="flex-inline" onsubmit="return confirm('Are you sure you want to quit this club?');">
+                                    <button type="submit" name="quit_club" class="btn-outline-secondary-hover" onmouseover="this.style.borderColor='#dc2626';this.style.color='#dc2626'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#64748b'">Quit Club</button>
                                 </form>
                                 <?php if ($isNotifying): ?>
-                                <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:500;background:#e0e7ff;color:#4f46e5;border:1px solid #c7d2fe;">🔔 Notifying</span>
-                                <form method="POST" style="display:inline;">
-                                    <button type="submit" name="notify_unsub" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;">Unsubscribe</button>
+                                <span class="badge-notifying">🔔 Notifying</span>
+                                <form method="POST" class="flex-inline">
+                                    <button type="submit" name="notify_unsub" class="btn-outline-secondary">Unsubscribe</button>
                                 </form>
                                 <?php else: ?>
-                                <form method="POST" style="display:inline;">
-                                    <button type="submit" name="notify_sub" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;">🔔 Notify Me</button>
+                                <form method="POST" class="flex-inline">
+                                    <button type="submit" name="notify_sub" class="btn-outline-secondary">🔔 Notify Me</button>
                                 </form>
                                 <?php endif; ?>
                             </div>
                         <?php else: ?>
-                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                                <form method="POST" style="display:inline;">
-                                    <button type="submit" name="join_club" style="padding:6px 20px;border:none;border-radius:20px;font-size:13px;font-weight:600;background:var(--red,#dc2626);color:#fff;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">+ Join Club</button>
+                            <div class="flex-row">
+                                <form method="POST" class="flex-inline">
+                                    <button type="submit" name="join_club" class="btn-join" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">+ Join Club</button>
                                 </form>
                                 <?php if ($isNotifying): ?>
-                                <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:500;background:#e0e7ff;color:#4f46e5;border:1px solid #c7d2fe;">🔔 Notifying</span>
-                                <form method="POST" style="display:inline;">
-                                    <button type="submit" name="notify_unsub" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;">Unsubscribe</button>
+                                <span class="badge-notifying">🔔 Notifying</span>
+                                <form method="POST" class="flex-inline">
+                                    <button type="submit" name="notify_unsub" class="btn-outline-secondary">Unsubscribe</button>
                                 </form>
                                 <?php else: ?>
-                                <form method="POST" style="display:inline;">
-                                    <button type="submit" name="notify_sub" style="padding:6px 16px;border:1px solid #e2e8f0;border-radius:20px;font-size:12px;font-weight:500;background:#fff;color:#64748b;cursor:pointer;">🔔 Notify Me</button>
+                                <form method="POST" class="flex-inline">
+                                    <button type="submit" name="notify_sub" class="btn-outline-secondary">🔔 Notify Me</button>
                                 </form>
                                 <?php endif; ?>
                             </div>
@@ -230,7 +231,7 @@
         </div>
 
         <!-- Tabs -->
-        <div class="tab-navigation-bar" style="margin-top:24px;">
+        <div class="tab-navigation-bar mt-24">
             <button type="button" class="tab-trigger active" onclick="switchTab(event, 'overview-tab')">Overview</button>
             <button type="button" class="tab-trigger" onclick="switchTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($ongoingEvents) + count($upcomingEvents); ?></span></button>
             <button type="button" class="tab-trigger" onclick="switchTab(event, 'members-tab')">Committee <span class="tab-counter"><?php echo $memberCount; ?></span></button>
@@ -244,7 +245,7 @@
                     <h3>About Our Club</h3>
                 </div>
                 <div class="form-group-modern">
-                    <p style="font-size:15px;line-height:1.7;color:var(--ink-2,#475569);margin:0;white-space:pre-line;"><?php echo $description ? nl2br($description) : 'No description available.'; ?></p>
+                    <p class="club-detail-desc"><?php echo $description ? nl2br($description) : 'No description available.'; ?></p>
                 </div>
             </div>
         </div>
@@ -259,15 +260,20 @@
                     <?php foreach($ongoingEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
                                 <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
                             </div>
                             <div class="strip-actions">
-                                <a href="DetailedEvent.php?id=<?php echo (int)$ev['eventID']; ?>" class="action-pill-btn" style="text-decoration:none;">View Details</a>
+                                <a href="DetailedEvent.php?id=<?php echo (int)$ev['eventID']; ?>" class="action-pill-btn pill-btn-no-deco">View Details</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -275,22 +281,27 @@
             <?php endif; ?>
 
             <?php if (!empty($upcomingEvents)): ?>
-                <div class="section-flex-header" style="<?php echo !empty($ongoingEvents) ? 'margin-top:24px;' : ''; ?>">
+                <div class="section-flex-header <?php echo !empty($ongoingEvents) ? 'cond-mt' : ''; ?>">
                     <h3>Upcoming Events</h3>
                 </div>
                 <div class="modern-events-list">
                     <?php foreach($upcomingEvents as $ev): ?>
                         <div class="event-strip-card">
                             <div class="date-badge-box">
-                                <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
+                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php else: ?>
+                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
+                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
+                                <?php endif; ?>
                             </div>
                             <div class="strip-main-info">
                                 <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
                                 <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
                             </div>
                             <div class="strip-actions">
-                                <a href="DetailedEvent.php?id=<?php echo (int)$ev['eventID']; ?>" class="action-pill-btn" style="text-decoration:none;">View Details</a>
+                                <a href="DetailedEvent.php?id=<?php echo (int)$ev['eventID']; ?>" class="action-pill-btn pill-btn-no-deco">View Details</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -312,26 +323,26 @@
                 <h3>Committee (<?php echo $memberCount; ?>)</h3>
             </div>
             <?php if (!empty($members)): ?>
-                <div class="table-wrapper" style="overflow-x:auto;">
-                    <table class="members-table" style="width:100%;border-collapse:collapse;font-size:14px;">
+                <div class="table-responsive">
+                    <table class="members-table">
                         <thead>
-                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
-                                <th style="padding:12px 16px;text-align:left;color:#64748b;font-weight:600;">No.</th>
-                                <th style="padding:12px 16px;text-align:left;color:#64748b;font-weight:600;">Student ID</th>
-                                <th style="padding:12px 16px;text-align:left;color:#64748b;font-weight:600;">Name</th>
-                                <th style="padding:12px 16px;text-align:left;color:#64748b;font-weight:600;">Email</th>
-                                <th style="padding:12px 16px;text-align:left;color:#64748b;font-weight:600;">Role</th>
+                            <tr class="members-table-head">
+                                <th>No.</th>
+                                <th>Student ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php $i = 1; foreach ($members as $m): ?>
-                                <tr style="border-bottom:1px solid #e2e8f0;">
-                                    <td style="padding:12px 16px;"><?php echo $i++; ?></td>
-                                    <td style="padding:12px 16px;"><?php echo htmlspecialchars($m['studentID']); ?></td>
-                                    <td style="padding:12px 16px;"><?php echo htmlspecialchars($m['name']); ?></td>
-                                    <td style="padding:12px 16px;"><?php echo htmlspecialchars($m['email']); ?></td>
-                                    <td style="padding:12px 16px;">
-                                        <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:<?php echo $m['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $m['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
+                                <tr class="members-table-row">
+                                    <td><?php echo $i++; ?></td>
+                                    <td><?php echo htmlspecialchars($m['studentID']); ?></td>
+                                    <td><?php echo htmlspecialchars($m['name']); ?></td>
+                                    <td><?php echo htmlspecialchars($m['email']); ?></td>
+                                    <td>
+                                        <span class="badge-role-tag" style="background:<?php echo $m['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $m['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
                                             <?php echo htmlspecialchars($m['role']); ?>
                                         </span>
                                     </td>
@@ -355,17 +366,17 @@
                 <div class="card-title-header">
                     <h3>Contact Details</h3>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
+                <div class="contact-grid">
                     <?php if ($clubEmail): ?>
                     <div>
-                        <label style="font-size:12px;font-weight:700;color:var(--ink-3,#94a3b8);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Email</label>
-                        <p style="font-size:15px;color:var(--ink,#1a1a2e);margin:0;"><?php echo $clubEmail; ?></p>
+                        <label class="contact-label">Email</label>
+                        <p class="contact-value"><?php echo $clubEmail; ?></p>
                     </div>
                     <?php endif; ?>
                     <?php if ($socialMedia): ?>
-                    <div style="grid-column:1/-1;">
-                        <label style="font-size:12px;font-weight:700;color:var(--ink-3,#94a3b8);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Social Media & Contacts</label>
-                        <p style="font-size:15px;color:var(--ink,#1a1a2e);margin:0;white-space:pre-line;"><?php echo nl2br(htmlspecialchars($socialMedia)); ?></p>
+                    <div class="contact-full">
+                        <label class="contact-label">Social Media & Contacts</label>
+                        <p class="contact-value-pre"><?php echo nl2br(htmlspecialchars($socialMedia)); ?></p>
                     </div>
                     <?php endif; ?>
                 </div>

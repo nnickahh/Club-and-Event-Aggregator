@@ -110,7 +110,7 @@
                         <span class="mod-activity-dot"></span>
                         <span>
                             <span class="act-title"><?php echo htmlspecialchars($act['eventTitle']); ?></span>
-                            <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo (int)$act['adminID']; ?>" style="color:inherit;text-decoration:underline;"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
+                            <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo (int)$act['adminID']; ?>" class="text-muted-link-inherit"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
                             <span class="act-status">-
                                 <?php
                                     $s = $act['status'] ?? 'approved';
@@ -124,7 +124,7 @@
                     </div>
                 <?php endforeach; ?>
             <?php else: ?>
-                <div class="event-empty-box" style="margin-top:0;">
+                <div class="event-empty-box">
                     <div class="empty-icon">
                         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
                     </div>

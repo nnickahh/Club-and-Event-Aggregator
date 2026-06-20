@@ -26,6 +26,10 @@ function esc(s) {
     if (!s) return '';
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+function eventOnDate(ev, dateStr) {
+    if (!ev.eventEndDate || ev.eventEndDate === ev.eventDate) return ev.eventDate === dateStr;
+    return dateStr >= ev.eventDate && dateStr <= ev.eventEndDate;
+}
 // Convert hour integer to 12-hour AM/PM label
 function ampm(h) {
     if (h === 0)  return '12 AM';
@@ -72,7 +76,7 @@ async function renderMonthView() {
         const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
         let evHtml = '';
         events.forEach(ev => {
-            if (ev.eventDate === ds) {
+            if (eventOnDate(ev, ds)) {
                 const c = clubColor(ev.clubName);
                 evHtml += `<a href="DetailedEvent.php?id=${ev.eventID}" style="text-decoration:none;color:inherit;display:block;"><div class="calendar-event-pill" data-color="${c}" title="${ev.eventTitle}">${ev.eventTitle}</div></a>`;
             }
@@ -108,7 +112,7 @@ async function renderWeekView() {
 
     const wStart  = toDs(weekStart);
     const wEnd    = toDs(weekEnd);
-    const wEvents = events.filter(e => e.eventDate >= wStart && e.eventDate <= wEnd);
+    const wEvents = events.filter(e => e.eventDate <= wEnd && (e.eventEndDate || e.eventDate) >= wStart);
 
     // 12 AM (0) → 11 PM (23) — 24 rows exactly
     const START_H = 0;
@@ -136,7 +140,7 @@ async function renderWeekView() {
     const colsHTML = days.map(d => {
         const ds      = toDs(d);
         const isToday = ds === todayStr;
-        const dayEvs  = wEvents.filter(e => e.eventDate === ds);
+        const dayEvs  = wEvents.filter(e => eventOnDate(e, ds));
 
         // Exactly HOURS rows — no more, no less
         const rowsHTML = Array.from({length: HOURS}, () =>

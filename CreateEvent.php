@@ -20,6 +20,7 @@
     if (isset($_POST["submit"])) {
         $eventTitle  = trim($_POST['eventTitle']);
         $eventDate   = $_POST['eventDate'];
+        $eventEndDate = !empty(trim($_POST['eventEndDate'])) ? trim($_POST['eventEndDate']) : null;
         $eventTime   = trim($_POST['eventTime']);
         $eventEndTime = !empty(trim($_POST['eventEndTime'])) ? trim($_POST['eventEndTime']) : null;
         $venue       = trim($_POST['venue']);
@@ -38,13 +39,13 @@
             // Validate file type
             $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
             if (!in_array($imageFileType, $allowedTypes)) {
-                $message = "<p class='msg-error' style='color:#ED1C24; font-weight:600;'>Only JPG, JPEG, PNG, GIF & WEBP files are allowed.</p>";
+                $message = "<p class='msg-error'>Only JPG, JPEG, PNG, GIF & WEBP files are allowed.</p>";
             } elseif ($_FILES['eventImage']['size'] > 5 * 1024 * 1024) {
-                $message = "<p class='msg-error' style='color:#ED1C24; font-weight:600;'>File size must be less than 5MB.</p>";
+                $message = "<p class='msg-error'>File size must be less than 5MB.</p>";
             } elseif (move_uploaded_file($_FILES['eventImage']['tmp_name'], $targetPath)) {
                 $eventImage = $targetPath;
             } else {
-                $message = "<p class='msg-error' style='color:#ED1C24; font-weight:600;'>Failed to upload image.</p>";
+                $message = "<p class='msg-error'>Failed to upload image.</p>";
             }
         }
 
@@ -77,19 +78,19 @@
         }
 
         if (empty($message)) {
-            $stmt = $conn->prepare("INSERT INTO events (adminID, eventTitle, eventDate, eventTime, eventEndTime, venue, capacity, description, eventImage, status, payment_methods, tng_phone, tng_qr, bank_details, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)");
+            $stmt = $conn->prepare("INSERT INTO events (adminID, eventTitle, eventDate, eventEndDate, eventTime, eventEndTime, venue, capacity, description, eventImage, status, payment_methods, tng_phone, tng_qr, bank_details, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)");
 
             if ($stmt) {
-                $stmt->bind_param("ssssssissssssd", $adminID, $eventTitle, $eventDate, $eventTime, $eventEndTime, $venue, $capacity, $description, $eventImage, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $fee);
+                $stmt->bind_param("sssssssissssssd", $adminID, $eventTitle, $eventDate, $eventEndDate, $eventTime, $eventEndTime, $venue, $capacity, $description, $eventImage, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $fee);
 
                 if ($stmt->execute()) {
                     $showSuccessPopup = true;
                 } else {
-                    $message = "<p class='msg-error' style='color:#ED1C24; font-weight:600;'>Error creating event. Please try again.</p>";
+                    $message = "<p class='msg-error'>Error creating event. Please try again.</p>";
                 }
                 $stmt->close();
             } else {
-                $message = "<p class='msg-error' style='color:#ED1C24; font-weight:600;'>Database preparation failed.</p>";
+                $message = "<p class='msg-error'>Database preparation failed.</p>";
             }
         }
     }
@@ -126,11 +127,17 @@
                 </div>
 
                 <div class="form-group">
+                    <label>End Date :</label>
+                    <input type="date" name="eventEndDate" min="<?php echo date('Y-m-d'); ?>" placeholder="Leave blank for single-day event">
+                    <small class="text-xs-muted">Leave blank if the event is only one day.</small>
+                </div>
+
+                <div class="form-group">
                     <label>Event Time Schedule :</label>
-                    <div style="display:flex;gap:10px;align-items:center;">
-                        <input type="time" name="eventTime" required style="flex:1;">
-                        <span style="font-weight:600;color:var(--ink-3,#888);">—</span>
-                        <input type="time" name="eventEndTime" style="flex:1;">
+                    <div class="flex-time-row">
+                        <input type="time" name="eventTime" required class="form-input-flex">
+                        <span class="flex-time-sep">—</span>
+                        <input type="time" name="eventEndTime" class="form-input-flex">
                     </div>
                 </div>
 
@@ -146,78 +153,78 @@
 
                 <div class="form-group">
                     <label>Event Description / Remarks :</label>
-                    <textarea name="description" placeholder="Provide event context guidelines or register rules..." required style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid var(--border, rgba(0,0,0,0.15)); border-radius: 6px; box-sizing: border-box; font-family: inherit; resize: vertical;"></textarea>
+                    <textarea name="description" placeholder="Provide event context guidelines or register rules..." required class="form-textarea-lg"></textarea>
                 </div>
 
                 <div class="form-group">
                     <label>Event Fee (optional) :</label>
-                    <input type="number" name="fee" min="0" step="0.01" placeholder="0.00 (free)" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;font-size:14px;">
+                    <input type="number" name="fee" min="0" step="0.01" placeholder="0.00 (free)" class="form-input-lg">
                 </div>
 
                 <div class="form-group">
                     <label>Event Poster (optional) :</label>
-                    <input type="file" name="eventImage" accept="image/jpeg,image/png,image/gif,image/webp" style="width: 100%; padding: 8px 0;">
+                    <input type="file" name="eventImage" accept="image/jpeg,image/png,image/gif,image/webp" class="form-file-input">
                 </div>
 
                 <div class="form-group">
                     <label>Payment Methods (optional) :</label>
-                    <div style="margin-top:6px;text-align:left;">
-                        <label style="display:block;cursor:pointer;font-size:14px;margin-bottom:8px;font-weight:400;">
-                            <input type="checkbox" name="payment_methods[]" value="cash" onchange="togglePaymentFields()" style="width:auto;margin:0;vertical-align:middle;"> Cash
+                    <div class="flex-payment-checkboxes">
+                        <label>
+                            <input type="checkbox" name="payment_methods[]" value="cash" onchange="togglePaymentFields()" class="form-checkbox"> Cash
                         </label>
-                        <label style="display:block;cursor:pointer;font-size:14px;margin-bottom:8px;font-weight:400;">
-                            <input type="checkbox" name="payment_methods[]" value="tng" onchange="togglePaymentFields()" style="width:auto;margin:0;vertical-align:middle;"> TNG (Touch 'n Go)
+                        <label>
+                            <input type="checkbox" name="payment_methods[]" value="tng" onchange="togglePaymentFields()" class="form-checkbox"> TNG (Touch 'n Go)
                         </label>
-                        <label style="display:block;cursor:pointer;font-size:14px;font-weight:400;">
-                            <input type="checkbox" name="payment_methods[]" value="bank_in" onchange="togglePaymentFields()" style="width:auto;margin:0;vertical-align:middle;"> Bank In
+                        <label>
+                            <input type="checkbox" name="payment_methods[]" value="bank_in" onchange="togglePaymentFields()" class="form-checkbox"> Bank In
                         </label>
                     </div>
 
-                    <div id="tngFields" style="display:none;margin-top:12px;padding:14px;background:#f9f9f9;border-radius:8px;">
-                        <p style="font-size:13px;font-weight:600;margin:0 0 10px;color:var(--ink-2);">TNG Payment Details</p>
+                    <div id="tngFields" class="payment-section">
+                        <p class="payment-section-title">TNG Payment Details</p>
                         <div style="margin-bottom:10px;">
-                            <label style="font-size:12px;display:block;margin-bottom:4px;">Phone Number (optional)</label>
-                            <input type="text" name="tng_phone" placeholder="e.g., 012-3456789" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;font-size:13px;">
+                            <label class="form-label-sm">Phone Number (optional)</label>
+                            <input type="text" name="tng_phone" placeholder="e.g., 012-3456789" class="form-input">
                         </div>
                         <div>
-                            <label style="font-size:12px;display:block;margin-bottom:4px;">QR Code Image (optional)</label>
-                            <input type="file" name="tng_qr" accept="image/*" style="width:100%;padding:6px 0;font-size:13px;">
+                            <label class="form-label-sm">QR Code Image (optional)</label>
+                            <input type="file" name="tng_qr" accept="image/*" class="form-file-input-sm">
                         </div>
                     </div>
 
-                    <div id="bankFields" style="display:none;margin-top:12px;padding:14px;background:#f9f9f9;border-radius:8px;">
-                        <p style="font-size:13px;font-weight:600;margin:0 0 10px;color:var(--ink-2);">Bank In Details</p>
+                    <div id="bankFields" class="payment-section">
+                        <p class="payment-section-title">Bank In Details</p>
                         <div style="margin-bottom:10px;">
-                            <label style="font-size:12px;display:block;margin-bottom:4px;">Bank Name</label>
-                            <input type="text" name="bank_name" placeholder="e.g., CIMB Bank" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;font-size:13px;">
+                            <label class="form-label-sm">Bank Name</label>
+                            <input type="text" name="bank_name" placeholder="e.g., CIMB Bank" class="form-input">
                         </div>
                         <div style="margin-bottom:10px;">
-                            <label style="font-size:12px;display:block;margin-bottom:4px;">Account Number</label>
-                            <input type="text" name="bank_account" placeholder="e.g., 1234-567-890" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;font-size:13px;">
+                            <label class="form-label-sm">Account Number</label>
+                            <input type="text" name="bank_account" placeholder="e.g., 1234-567-890" class="form-input">
                         </div>
                         <div>
-                            <label style="font-size:12px;display:block;margin-bottom:4px;">Account Holder Name</label>
-                            <input type="text" name="bank_holder" placeholder="e.g., John Doe" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;font-size:13px;">
+                            <label class="form-label-sm">Account Holder Name</label>
+                            <input type="text" name="bank_holder" placeholder="e.g., John Doe" class="form-input">
                         </div>
                     </div>
                 </div>
 
-                <button type="submit" name="submit" class="btn-primary" style="margin-top: 15px; width: 100%;">Submit for Approval</button>
+                <button type="submit" name="submit" class="btn-primary mt-16 w-100">Submit for Approval</button>
 
-                <div style="text-align: center; margin-top: 20px; font-size: 14px; color: var(--ink-3, #888);">
-                    Changed your mind? <a href="AdminDashboard.php" style="color: var(--red, #ED1C24); text-decoration: none; font-weight: 600;">Back to Dashboard</a>
+                <div class="text-center text-sm-muted" style="margin-top:20px;">
+                    Changed your mind? <a href="AdminDashboard.php" class="text-muted-link">Back to Dashboard</a>
                 </div>
             </form>
         </div>
     </div>
 
     <?php if ($showSuccessPopup): ?>
-    <div class="logout-modal-overlay" style="display:flex;">
-        <div class="logout-modal-box" style="text-align:center;padding:40px 36px;">
-            <div style="width:56px;height:56px;border-radius:50%;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;margin:0 auto 16px;">✓</div>
-            <h3 style="margin:0 0 8px;font-size:18px;">Event Submitted!</h3>
-            <p style="font-size:14px;color:#666;margin:0 0 24px;">Your event has been submitted for review.<br>A moderator will review it before it becomes visible to students.</p>
-            <button onclick="window.location.href='AdminDashboard.php'" class="btn-primary" style="padding:10px 32px;border:none;cursor:pointer;">OK</button>
+    <div class="logout-modal-overlay">
+        <div class="logout-modal-box modal-content-center">
+            <div class="modal-icon-success">✓</div>
+            <h3 class="modal-title">Event Submitted!</h3>
+            <p class="modal-text">Your event has been submitted for review.<br>A moderator will review it before it becomes visible to students.</p>
+            <button onclick="window.location.href='AdminDashboard.php'" class="btn-primary modal-btn">OK</button>
         </div>
     </div>
     <?php else: ?>

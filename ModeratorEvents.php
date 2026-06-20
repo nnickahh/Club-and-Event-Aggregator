@@ -18,13 +18,13 @@
         $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'pending'");
         $counts['pending'] = $r ? $r->fetch_assoc()['c'] : 0;
 
-        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'approved' AND eventDate = '$today'");
+        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'approved' AND '$today' BETWEEN eventDate AND COALESCE(eventEndDate, eventDate)");
         $counts['ongoing'] = $r ? $r->fetch_assoc()['c'] : 0;
 
         $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'approved' AND eventDate > '$today'");
         $counts['upcoming'] = $r ? $r->fetch_assoc()['c'] : 0;
 
-        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE (status = 'approved' AND eventDate < '$today') OR status = 'ended'");
+        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE (status = 'approved' AND '$today' > COALESCE(eventEndDate, eventDate)) OR status = 'ended'");
         $counts['completed'] = $r ? $r->fetch_assoc()['c'] : 0;
 
         $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'cancelled'");
@@ -36,13 +36,13 @@
                 $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'pending' ORDER BY e.created_at DESC";
                 break;
             case 'ongoing':
-                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'approved' AND e.eventDate = '$today' ORDER BY e.eventTime ASC";
+                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'approved' AND '$today' BETWEEN e.eventDate AND COALESCE(e.eventEndDate, e.eventDate) ORDER BY e.eventTime ASC";
                 break;
             case 'upcoming':
                 $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'approved' AND e.eventDate > '$today' ORDER BY e.eventDate ASC";
                 break;
             case 'completed':
-                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE (e.status = 'approved' AND e.eventDate < '$today') OR e.status = 'ended' ORDER BY e.eventDate DESC";
+                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE (e.status = 'approved' AND '$today' > COALESCE(e.eventEndDate, e.eventDate)) OR e.status = 'ended' ORDER BY e.eventDate DESC";
                 break;
             case 'cancelled':
                 $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'cancelled' ORDER BY e.eventDate DESC";
@@ -107,7 +107,7 @@
                     <article class="event-card">
                         <div class="card-stripe" data-color="<?php echo $tab === 'completed' ? 'green' : ($tab === 'cancelled' ? 'red' : ($tab === 'pending' ? 'amber' : ($tab === 'ongoing' ? 'blue' : 'purple'))); ?>"></div>
                         <?php if (!empty($event['eventImage'])): ?>
-                            <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" style="width:100%;height:160px;object-fit:cover;display:block;">
+                            <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" class="img-event-card">
                         <?php endif; ?>
                         <div class="card-body">
                             <?php if ($tab === 'pending'): ?>
@@ -117,7 +117,7 @@
                             <?php elseif ($tab === 'upcoming'): ?>
                                 <span class="mod-status-tag approved">Upcoming</span>
                             <?php elseif ($tab === 'cancelled'): ?>
-                                <span class="mod-status-tag approved" style="background:#fef2f2;color:#dc2626;">Cancelled</span>
+                                <span class="mod-status-tag declined">Cancelled</span>
                             <?php else: ?>
                                 <span class="mod-status-tag approved">Completed</span>
                             <?php endif; ?>
@@ -127,7 +127,7 @@
                             <div class="event-meta">
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-                                    <span><?php echo date('d M Y', strtotime($event['eventDate'])); ?> at <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></span>
+                                    <span><?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?> at <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></span>
                                 </div>
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -135,7 +135,7 @@
                                 </div>
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                                    <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" style="text-decoration:none;color:inherit;"><span><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
+                                    <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" class="no-deco stat-link-inherit"><span><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
                                 </div>
                             </div>
 
