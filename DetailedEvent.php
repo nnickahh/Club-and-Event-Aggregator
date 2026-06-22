@@ -14,7 +14,7 @@
         $eventID = $_GET['id'];
 
         // 3. Fetch specific event details using Prepared Statement
-        $stmt = $conn->prepare("SELECT e.*, a.clubName AS club_name, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE e.eventID = ? AND e.status = 'approved'");
+        $stmt = $conn->prepare("SELECT e.*, a.clubName AS club_name, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE e.eventID = ?");
         $stmt->bind_param("i", $eventID);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -65,6 +65,10 @@
             <a href="ClubsDetails.php?id=<?php echo (int)($event['clubID'] ?? 0); ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? $event['clubName'] ?? 'Club'); ?></span></a>
             <h1 class="event-detail-title"><?php echo htmlspecialchars($event['eventTitle']); ?></h1>
             
+            <?php if ($event['status'] === 'cancelled'): ?>
+                <div class="msg-banner" style="background:#fee;color:#b91c1c;border:1px solid #fecaca;border-radius:8px;padding:12px 18px;margin-bottom:16px;font-size:14px;font-weight:600;">This event has been cancelled.</div>
+            <?php endif; ?>
+            
             <div class="event-meta event-meta-lg">
                 <p><strong>Date:</strong> <?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?></p>
                 <p><strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></p>
@@ -110,7 +114,9 @@
                     <?php endif; ?>
                 <?php endif; ?>
                 <?php endif; ?>
-            <?php if ($alreadyRegistered): ?>
+            <?php if ($event['status'] === 'cancelled'): ?>
+                <div class="msg-banner" style="background:#fee;color:#b91c1c;border:1px solid #fecaca;border-radius:8px;padding:12px 18px;font-size:14px;font-weight:600;text-align:center;">Registration is closed for this cancelled event.</div>
+            <?php elseif ($alreadyRegistered): ?>
                 <div class="registered-banner">
                     <span class="registered-text">✓ You are registered for this event</span>
                 </div>

@@ -4,7 +4,7 @@
     if (isset($_SESSION['admin_id'])) {
         require_once 'db_connect.php';
         $adminID = $_SESSION['admin_id'];
-        $nStmt = $conn->prepare("SELECT id, message, eventID, created_at FROM notifications WHERE adminID = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5");
+        $nStmt = $conn->prepare("SELECT id, message, eventID, clubID, created_at FROM notifications WHERE adminID = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5");
         $nStmt->bind_param("s", $adminID);
         $nStmt->execute();
         $nResult = $nStmt->get_result();
@@ -31,7 +31,11 @@
             <div class="dropdown-content notif-dropdown">
                 <?php if (!empty($notifications)): ?>
                     <?php foreach ($notifications as $n): ?>
-                        <a href="<?php echo !empty($n['eventID']) ? 'EditEvent.php?id=' . (int)$n['eventID'] : 'ClubSettings.php'; ?>" class="notif-link">
+                        <a href="<?php
+                            if (!empty($n['eventID'])) { echo 'EditEvent.php?id=' . (int)$n['eventID']; }
+                            elseif (!empty($n['clubID'])) { echo 'ClubSettings.php'; }
+                            else { echo 'ClubSettings.php'; }
+                        ?>" class="notif-link">
                             <?php echo htmlspecialchars($n['message']); ?>
                             <br><small class="notif-time"><?php echo date('d M h:i A', strtotime($n['created_at'])); ?></small>
                         </a>

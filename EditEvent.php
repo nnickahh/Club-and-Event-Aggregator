@@ -97,18 +97,19 @@
         $eStmt->close();
 
         if ($eRow) {
-            $clubStmt = $conn->prepare("SELECT clubName FROM admins WHERE adminID = ?");
+            $clubStmt = $conn->prepare("SELECT a.clubName, c.clubID FROM admins a LEFT JOIN clubs c ON a.adminID = c.adminID WHERE a.adminID = ?");
             $clubStmt->bind_param("s", $eRow['adminID']);
             $clubStmt->execute();
             $clubRow = $clubStmt->get_result()->fetch_assoc();
             $clubName = $clubRow ? $clubRow['clubName'] : 'Your club';
+            $clubID = $clubRow ? (int)($clubRow['clubID'] ?? 0) : 0;
             $clubStmt->close();
 
             // Notify registered students
             $regMsg = $eRow['eventTitle'] . ' has been cancelled. If you have made any payment, please contact the club for a refund.';
-            $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+            $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID, clubID) VALUES (?, ?, ?, ?)");
             foreach ($regStudents as $s) {
-                $nStmt->bind_param("ssi", $s['studentID'], $regMsg, $eventID);
+                $nStmt->bind_param("ssii", $s['studentID'], $regMsg, $eventID, $clubID);
                 $nStmt->execute();
             }
 
@@ -121,7 +122,7 @@
 
             $subMsg = $eRow['eventTitle'] . ' by ' . $clubName . ' has been cancelled.';
             foreach ($subStudents as $s) {
-                $nStmt->bind_param("ssi", $s['studentID'], $subMsg, $eventID);
+                $nStmt->bind_param("ssii", $s['studentID'], $subMsg, $eventID, $clubID);
                 $nStmt->execute();
             }
             $nStmt->close();

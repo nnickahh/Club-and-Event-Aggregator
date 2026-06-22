@@ -233,6 +233,16 @@
         error_log('DB eventID migration error: ' . $e->getMessage());
     }
 
+    // Add `clubID` column to `notifications` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM notifications LIKE 'clubID'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE notifications ADD COLUMN clubID INT UNSIGNED DEFAULT NULL AFTER eventID");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB clubID migration error: ' . $e->getMessage());
+    }
+
     // Create `club_notify` table (student subscriptions to club notifications)
     try {
         $conn->query("CREATE TABLE IF NOT EXISTS club_notify (
@@ -253,11 +263,22 @@
             studentID VARCHAR(20) NOT NULL,
             message VARCHAR(500) NOT NULL,
             eventID INT UNSIGNED DEFAULT NULL,
+            clubID INT UNSIGNED DEFAULT NULL,
             is_read TINYINT(1) DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } catch (mysqli_sql_exception $e) {
         error_log('DB student_notifications table creation error: ' . $e->getMessage());
+    }
+
+    // Add `clubID` column to `student_notifications` table (migration for existing tables)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM student_notifications LIKE 'clubID'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE student_notifications ADD COLUMN clubID INT UNSIGNED DEFAULT NULL AFTER eventID");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB clubID migration for student_notifications error: ' . $e->getMessage());
     }
 
 // ─── Helper functions ──────────────────────────────────────

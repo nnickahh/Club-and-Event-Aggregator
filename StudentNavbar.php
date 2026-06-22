@@ -4,7 +4,7 @@
     if (isset($_SESSION['student_id'])) {
         require_once 'db_connect.php';
         $studentID = $_SESSION['student_id'];
-        $nStmt = $conn->prepare("SELECT id, message, eventID, created_at FROM student_notifications WHERE studentID = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5");
+        $nStmt = $conn->prepare("SELECT id, message, eventID, clubID, created_at FROM student_notifications WHERE studentID = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5");
         $nStmt->bind_param("s", $studentID);
         $nStmt->execute();
         $nResult = $nStmt->get_result();
@@ -44,7 +44,11 @@
             <div class="dropdown-content notif-dropdown">
                 <?php if (!empty($notifications)): ?>
                     <?php foreach ($notifications as $n): ?>
-                        <a href="<?php echo !empty($n['eventID']) ? 'DetailedEvent.php?id=' . (int)$n['eventID'] : 'Clubs.php'; ?>" class="notif-link">
+                        <a href="<?php
+                            if (!empty($n['eventID'])) { echo 'DetailedEvent.php?id=' . (int)$n['eventID']; }
+                            elseif (!empty($n['clubID'])) { echo 'ClubsDetails.php?id=' . (int)$n['clubID']; }
+                            else { echo 'Clubs.php'; }
+                        ?>" class="notif-link">
                             <?php echo htmlspecialchars($n['message']); ?>
                             <br><small class="notif-time"><?php echo date('d M h:i A', strtotime($n['created_at'])); ?></small>
                         </a>

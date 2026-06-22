@@ -96,9 +96,9 @@
         $nameResult = $nameStmt->get_result();
         $studentName = ($nameRow = $nameResult->fetch_assoc()) ? $nameRow['name'] : $studentID;
         $nameStmt->close();
-        $notifStmt = $conn->prepare("INSERT INTO notifications (adminID, message) VALUES (?, ?)");
+        $notifStmt = $conn->prepare("INSERT INTO notifications (adminID, message, clubID) VALUES (?, ?, ?)");
         $notifMsg = "$studentName joined your club";
-        $notifStmt->bind_param("ss", $adminID, $notifMsg);
+        $notifStmt->bind_param("ssi", $adminID, $notifMsg, $clubID);
         $notifStmt->execute();
         $notifStmt->close();
         // Auto-subscribe to club notifications

@@ -34,20 +34,21 @@
                 $eRow = $eStmt->get_result()->fetch_assoc();
                 $eStmt->close();
                 if ($eRow) {
-                    $clubStmt = $conn->prepare("SELECT clubName FROM admins WHERE adminID = ?");
+                    $clubStmt = $conn->prepare("SELECT a.clubName, c.clubID FROM admins a LEFT JOIN clubs c ON a.adminID = c.adminID WHERE a.adminID = ?");
                     $clubStmt->bind_param("s", $eRow['adminID']);
                     $clubStmt->execute();
                     $clubRow = $clubStmt->get_result()->fetch_assoc();
                     $clubName = $clubRow ? $clubRow['clubName'] : 'A club';
+                    $clubID = $clubRow ? (int)($clubRow['clubID'] ?? 0) : 0;
                     $clubStmt->close();
                     $subStmt = $conn->prepare("SELECT studentID FROM club_notify WHERE adminID = ?");
                     $subStmt->bind_param("s", $eRow['adminID']);
                     $subStmt->execute();
                     $subResult = $subStmt->get_result();
                     $msg = $clubName . ' posted a new event: ' . $eRow['eventTitle'];
-                    $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+                    $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID, clubID) VALUES (?, ?, ?, ?)");
                     while ($sub = $subResult->fetch_assoc()) {
-                        $notifStmt->bind_param("ssi", $sub['studentID'], $msg, $eventID);
+                        $notifStmt->bind_param("ssii", $sub['studentID'], $msg, $eventID, $clubID);
                         $notifStmt->execute();
                     }
                     $notifStmt->close();
