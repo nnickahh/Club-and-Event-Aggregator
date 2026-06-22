@@ -115,6 +115,20 @@
 
     $today = date('Y-m-d');
     $eventStatus = $event['status'] ?? 'pending';
+
+    // Fetch waiting list
+    $waitStmt = $conn->prepare("SELECT w.waitID, w.studentID, w.registered_at, s.name, s.email FROM waiting_list w JOIN students s ON w.studentID = s.studentID WHERE w.eventID = ? ORDER BY w.registered_at ASC");
+    $waitStmt->bind_param("i", $eventID);
+    $waitStmt->execute();
+    $waitlist = $waitStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $waitStmt->close();
+
+    // Fetch registered count
+    $regCntStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM registrations WHERE eventID = ?");
+    $regCntStmt->bind_param("i", $eventID);
+    $regCntStmt->execute();
+    $regCount = (int)$regCntStmt->get_result()->fetch_assoc()['cnt'];
+    $regCntStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -257,6 +271,43 @@
                 <p class="event-description">
                     <?php echo nl2br(htmlspecialchars($event['description'])); ?>
                 </p>
+
+                <hr class="divider-light">
+
+                <h3>Registrations</h3>
+                <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px;">
+                    <strong><?php echo $regCount; ?></strong> registered
+                    &middot;
+                    <strong><?php echo count($waitlist); ?></strong> on waiting list
+                </p>
+
+                <?php if (!empty($waitlist)): ?>
+                <h4 style="font-size:14px;margin:16px 0 8px;color:#856404;">Waiting List</h4>
+                <div class="table-responsive" style="margin-bottom:16px;">
+                    <table class="part-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Student ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Joined</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php $wi = 1; foreach ($waitlist as $w): ?>
+                            <tr>
+                                <td><?php echo $wi++; ?></td>
+                                <td><?php echo htmlspecialchars($w['studentID']); ?></td>
+                                <td><?php echo htmlspecialchars($w['name']); ?></td>
+                                <td><?php echo htmlspecialchars($w['email']); ?></td>
+                                <td><?php echo date('d M Y h:iA', strtotime($w['registered_at'])); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php endif; ?>
 
                 <hr class="divider-light">
 

@@ -281,6 +281,20 @@
         error_log('DB clubID migration for student_notifications error: ' . $e->getMessage());
     }
 
+    // Create `waiting_list` table (event waitlist)
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS waiting_list (
+            waitID INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            studentID VARCHAR(50) NOT NULL,
+            eventID INT NOT NULL,
+            payment_method VARCHAR(50) DEFAULT NULL,
+            registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_wait (studentID, eventID)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB waiting_list table creation error: ' . $e->getMessage());
+    }
+
 // ─── Helper functions ──────────────────────────────────────
 
 function formatDateRange($eventDate, $eventEndDate = null) {

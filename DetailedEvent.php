@@ -39,9 +39,27 @@
     $alreadyRegistered = $checkStmt->get_result()->num_rows > 0;
     $checkStmt->close();
 
+    // Check if on waiting list
+    $waitCheck = $conn->prepare("SELECT * FROM waiting_list WHERE studentID = ? AND eventID = ?");
+    $waitCheck->bind_param("si", $studentID, $eventID);
+    $waitCheck->execute();
+    $onWaitlist = $waitCheck->get_result()->num_rows > 0;
+    $waitCheck->close();
+
+    // Get registration count and capacity
+    $regCountStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM registrations WHERE eventID = ?");
+    $regCountStmt->bind_param("i", $eventID);
+    $regCountStmt->execute();
+    $regCount = (int)$regCountStmt->get_result()->fetch_assoc()['cnt'];
+    $regCountStmt->close();
+    $capacity = (int)$event['capacity'];
+    $isFull = $regCount >= $capacity;
+
     $showPopup = isset($_GET['registered']) && $_GET['registered'] === '1';
     $showCancelPopup = isset($_GET['cancelled']) && $_GET['cancelled'] === '1';
     $showCancelError = isset($_GET['cancelled']) && $_GET['cancelled'] === '0';
+    $showWaitlistPopup = isset($_GET['waitlisted']) && $_GET['waitlisted'] === '1';
+    $showOnWaitlist = isset($_GET['on_waitlist']) && $_GET['on_waitlist'] === '1';
 ?>
 
 <!DOCTYPE html>
@@ -74,6 +92,9 @@
                 <p><strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></p>
                 <p><strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?></p>
                 <p><strong>Fee:</strong> <?php echo $fee > 0 ? 'RM' . number_format($fee, 2) : 'Free'; ?></p>
+                <p><strong>Capacity:</strong> <?php echo $regCount; ?> / <?php echo $capacity; ?> registered
+                    <?php if ($isFull): ?><span style="color:#dc2626;font-weight:600;"> (Full)</span><?php endif; ?>
+                </p>
             </div>
 
             <hr class="divider-light">
@@ -124,6 +145,33 @@
                     <form action="CancelRegistration.php" method="POST" onsubmit="return confirm('Cancel your registration for this event?');">
                         <input type="hidden" name="eventID" value="<?php echo $event['eventID']; ?>">
                         <button type="submit" class="btn-primary btn-cancel btn-primary-sm">Cancel Registration</button>
+                    </form>
+                </div>
+            <?php elseif ($onWaitlist): ?>
+                <div class="registered-banner" style="background:#fff8e1;border-color:#ffe082;">
+                    <span class="registered-text" style="color:#f57f17;">⏳ You are on the waiting list</span>
+                </div>
+            <?php elseif ($isFull): ?>
+                <div class="text-center mt-16">
+                    <p style="color:#dc2626;font-weight:600;margin-bottom:12px;">This event is full.</p>
+                    <form action="RegisterEvent.php" method="POST">
+                        <input type="hidden" name="event_id" value="<?php echo $event['eventID']; ?>">
+                        <div class="mb-16">
+                            <?php if ($fee > 0 && !empty($event['payment_methods'])): ?>
+                            <label class="form-label-md">Payment Method</label>
+                            <select name="payment_method" class="form-select">
+                                <option value="">Select payment method</option>
+                                <?php
+                                $methods = explode(',', $event['payment_methods']);
+                                $labels = ['cash'=>'Cash', 'tng'=>'TNG (Touch \'n Go)', 'bank_in'=>'Bank In'];
+                                foreach ($methods as $m): $m = trim($m);
+                                ?>
+                                <option value="<?php echo htmlspecialchars($m); ?>"><?php echo $labels[$m] ?? $m; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php endif; ?>
+                        </div>
+                        <button type="submit" name="register" class="btn-primary btn-register" style="background:#f57f17;">Join Waiting List</button>
                     </form>
                 </div>
             <?php else: ?>
@@ -177,6 +225,26 @@
             <div class="modal-icon-success">✓</div>
             <h3 class="modal-title">Registered Successfully!</h3>
             <p class="modal-text">You have successfully registered for this event.</p>
+            <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary modal-btn">OK</button>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($showWaitlistPopup): ?>
+    <div class="logout-modal-overlay">
+        <div class="logout-modal-box modal-content-center">
+            <div class="modal-icon-waitlist" style="background:#f57f17;">⏳</div>
+            <h3 class="modal-title">Added to Waiting List</h3>
+            <p class="modal-text">The event is full. You have been added to the waiting list. You'll be notified if a spot opens up.</p>
+            <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary modal-btn">OK</button>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($showOnWaitlist): ?>
+    <div class="logout-modal-overlay">
+        <div class="logout-modal-box modal-content-center">
+            <div class="modal-icon-waitlist" style="background:#f57f17;">⏳</div>
+            <h3 class="modal-title">Already on Waiting List</h3>
+            <p class="modal-text">You are already on the waiting list for this event.</p>
             <button onclick="window.location.href='DetailedEvent.php?id=<?php echo (int)$eventID; ?>'" class="btn-primary modal-btn">OK</button>
         </div>
     </div>

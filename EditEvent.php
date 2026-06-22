@@ -207,12 +207,69 @@
         }
     }
 
+    // Handle remove registered participant
+    if (isset($_POST['remove_registered']) && $eventID) {
+        $sid = $_POST['student_id'] ?? '';
+        if ($sid) {
+            $del = $conn->prepare("DELETE FROM registrations WHERE eventID = ? AND studentID = ?");
+            $del->bind_param("is", $eventID, $sid);
+            $del->execute();
+            $del->close();
+        }
+        header("Location: EditEvent.php?id=" . $eventID);
+        exit();
+    }
+
+    // Handle remove from waiting list
+    if (isset($_POST['remove_waitlist']) && $eventID) {
+        $wid = (int)($_POST['wait_id'] ?? 0);
+        if ($wid) {
+            $del = $conn->prepare("DELETE FROM waiting_list WHERE waitID = ?");
+            $del->bind_param("i", $wid);
+            $del->execute();
+            $del->close();
+        }
+        header("Location: EditEvent.php?id=" . $eventID);
+        exit();
+    }
+
+    // Handle promote from waiting list to registered
+    if (isset($_POST['promote_waitlist']) && $eventID) {
+        $wid = (int)($_POST['wait_id'] ?? 0);
+        if ($wid) {
+            $wStmt = $conn->prepare("SELECT * FROM waiting_list WHERE waitID = ?");
+            $wStmt->bind_param("i", $wid);
+            $wStmt->execute();
+            $wRow = $wStmt->get_result()->fetch_assoc();
+            $wStmt->close();
+            if ($wRow) {
+                $ins = $conn->prepare("INSERT IGNORE INTO registrations (studentID, eventID, payment_method) VALUES (?, ?, ?)");
+                $ins->bind_param("sis", $wRow['studentID'], $eventID, $wRow['payment_method']);
+                $ins->execute();
+                $ins->close();
+                $del = $conn->prepare("DELETE FROM waiting_list WHERE waitID = ?");
+                $del->bind_param("i", $wid);
+                $del->execute();
+                $del->close();
+            }
+        }
+        header("Location: EditEvent.php?id=" . $eventID);
+        exit();
+    }
+
     // Fetch participants with payment & attendance status
     $partStmt = $conn->prepare("SELECT r.studentID, r.payment_status, r.attendance_status, r.payment_method, s.name, s.email FROM registrations r JOIN students s ON r.studentID = s.studentID WHERE r.eventID = ? ORDER BY s.name ASC");
     $partStmt->bind_param("i", $eventID);
     $partStmt->execute();
     $participants = $partStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $partStmt->close();
+
+    // Fetch waiting list
+    $waitStmt = $conn->prepare("SELECT w.waitID, w.studentID, w.payment_method, w.registered_at, s.name, s.email FROM waiting_list w JOIN students s ON w.studentID = s.studentID WHERE w.eventID = ? ORDER BY w.registered_at ASC");
+    $waitStmt->bind_param("i", $eventID);
+    $waitStmt->execute();
+    $waitlist = $waitStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $waitStmt->close();
 
     $totalRegistered = count($participants);
     $totalPaid = count(array_filter($participants, fn($p) => $p['payment_status'] === 'paid'));
@@ -400,6 +457,7 @@
                                 <th>Payment Method</th>
                                 <th>Payment Status</th>
                                 <?php if ($isOngoing): ?><th>Attendance</th><?php endif; ?>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -438,6 +496,10 @@
                                     </button>
                                 </td>
                                 <?php endif; ?>
+                                <td>
+                                    <button class="remove-btn" title="Remove participant"
+                                            onclick="openRemoveReg('<?php echo htmlspecialchars($p['studentID']); ?>','<?php echo htmlspecialchars($p['name']); ?>')">✕</button>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -445,6 +507,66 @@
                 </div>
                 <?php if (empty($participants)): ?>
                     <p class="text-center text-xs-muted" style="padding:24px 0;">No participants yet.</p>
+                <?php endif; ?>
+
+                <!-- Remove Registered Student Modal -->
+                <div class="modal-overlay" id="removeRegModal">
+                    <div class="modal-box">
+                        <h3>Remove Participant</h3>
+                        <p style="font-size:13px;color:var(--ink-2);margin-bottom:16px;">Are you sure you want to remove <strong id="removeRegName"></strong> from this event?</p>
+                        <form method="POST">
+                            <input type="hidden" name="student_id" id="removeRegSid">
+                            <div class="modal-actions">
+                                <button type="button" class="btn-sm btn-sm-outline btn-pad-sm" onclick="document.getElementById('removeRegModal').classList.remove('open')">Cancel</button>
+                                <button type="submit" name="remove_registered" class="btn-outline-danger btn-pad-sm">Remove</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Waiting List -->
+            <div class="edit-card full-width">
+                <h3>
+                    <span>Waiting List (<?php echo count($waitlist); ?>)</span>
+                </h3>
+                <div class="table-responsive">
+                    <table class="part-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Student ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Joined</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php $wi = 1; foreach ($waitlist as $w): ?>
+                            <tr>
+                                <td><?php echo $wi++; ?></td>
+                                <td><?php echo htmlspecialchars($w['studentID']); ?></td>
+                                <td><?php echo htmlspecialchars($w['name']); ?></td>
+                                <td><?php echo htmlspecialchars($w['email']); ?></td>
+                                <td><?php echo date('d M Y h:iA', strtotime($w['registered_at'])); ?></td>
+                                <td>
+                                    <form method="POST" style="display:inline;">
+                                        <input type="hidden" name="wait_id" value="<?php echo (int)$w['waitID']; ?>">
+                                        <button type="submit" name="promote_waitlist" class="promote-btn" title="Move to registered">Move</button>
+                                    </form>
+                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Remove this student from the waiting list?');">
+                                        <input type="hidden" name="wait_id" value="<?php echo (int)$w['waitID']; ?>">
+                                        <button type="submit" name="remove_waitlist" class="remove-btn" title="Remove">✕</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php if (empty($waitlist)): ?>
+                    <p class="text-center text-xs-muted" style="padding:24px 0;">No one is on the waiting list.</p>
                 <?php endif; ?>
             </div>
         </div>
@@ -526,9 +648,17 @@
         });
     }
 
-    // Close modal on overlay click
-    document.getElementById('addModal').addEventListener('click', function (e) {
-        if (e.target === this) this.classList.remove('open');
+    function openRemoveReg(sid, name) {
+        document.getElementById('removeRegSid').value = sid;
+        document.getElementById('removeRegName').textContent = name;
+        document.getElementById('removeRegModal').classList.add('open');
+    }
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(el => {
+        el.addEventListener('click', function (e) {
+            if (e.target === this) this.classList.remove('open');
+        });
     });
     </script>
 </body>
