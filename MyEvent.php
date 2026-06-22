@@ -10,12 +10,19 @@
 
     $studentID = $_SESSION['student_id'];
 
-    // Registered events
-    $eventsStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE r.studentID = ? ORDER BY e.eventDate ASC");
-    $eventsStmt->bind_param("s", $studentID);
-    $eventsStmt->execute();
-    $eventsResult = $eventsStmt->get_result();
-    $eventsStmt->close();
+    // Registered events — separate active (ongoing/upcoming) from completed
+    $today = date('Y-m-d');
+    $activeStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE r.studentID = ? AND COALESCE(e.eventEndDate, e.eventDate) >= ? ORDER BY e.eventDate ASC");
+    $activeStmt->bind_param("ss", $studentID, $today);
+    $activeStmt->execute();
+    $activeEvents = $activeStmt->get_result();
+    $activeStmt->close();
+
+    $completedStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE r.studentID = ? AND COALESCE(e.eventEndDate, e.eventDate) < ? ORDER BY e.eventDate DESC");
+    $completedStmt->bind_param("ss", $studentID, $today);
+    $completedStmt->execute();
+    $completedEvents = $completedStmt->get_result();
+    $completedStmt->close();
 
     // Club memberships
     $clubsStmt = $conn->prepare("SELECT a.clubName, a.clubEmail, cm.role, cm.joined_at, c.clubID, c.profilePic FROM club_members cm JOIN admins a ON cm.adminID = a.adminID LEFT JOIN clubs c ON LOWER(TRIM(c.clubName)) = LOWER(TRIM(a.clubName)) WHERE cm.studentID = ? ORDER BY a.clubName ASC");
@@ -89,8 +96,8 @@
         </div>
 
         <?php if ($activeTab === 'events'): ?>
-            <?php if ($eventsResult && $eventsResult->num_rows > 0): ?>
-                <?php while ($row = $eventsResult->fetch_assoc()): ?>
+            <?php if ($activeEvents && $activeEvents->num_rows > 0): ?>
+                <?php while ($row = $activeEvents->fetch_assoc()): ?>
                     <div class="horizontal-card">
                         <div class="card-body">
                             <span class="tag tag-confirmed">Event Confirmed</span>
@@ -111,9 +118,31 @@
                 <?php endwhile; ?>
             <?php else: ?>
                 <div class="event-empty-box">
-                    <p>You haven't registered for any events yet.</p>
-                    <a href="StudentEvents.php">Browse Events</a>
+                    <p>No upcoming events. Register for an event to see it here.</p>
                 </div>
+            <?php endif; ?>
+
+            <?php if ($completedEvents && $completedEvents->num_rows > 0): ?>
+                <h3 style="margin-top:36px;font-size:16px;color:var(--ink-3);border-top:1px solid var(--border);padding-top:24px;">Completed</h3>
+                <?php while ($row = $completedEvents->fetch_assoc()): ?>
+                    <div class="horizontal-card" style="opacity:0.7;">
+                        <div class="card-body">
+                            <span class="tag tag-confirmed">Completed</span>
+                            <?php if (!empty($row['clubName'])): ?>
+                            <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="no-deco"><span class="tag"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
+                            <?php endif; ?>
+                            <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
+                            <div class="card-meta">
+                                <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?> |
+                                <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?> |
+                                <?php echo htmlspecialchars($row['venue']); ?>
+                            </div>
+                        </div>
+                        <div class="card-actions">
+                            <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline">Details →</a>
+                        </div>
+                    </div>
+                <?php endwhile; ?>
             <?php endif; ?>
         <?php endif; ?>
 
