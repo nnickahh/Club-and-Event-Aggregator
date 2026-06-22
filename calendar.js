@@ -67,19 +67,29 @@ async function renderMonthView() {
     const emptyBefore = firstDay === 0 ? 6 : firstDay - 1;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today       = new Date();
+    const mStart      = `${year}-${pad(month+1)}-01`;
+    const mEnd        = `${year}-${pad(month+1)}-${pad(daysInMonth)}`;
+
+    // Helper: day number (1-based) → grid column (1-7) and row (2+)
+    function dayGridPos(day) {
+        const idx = emptyBefore + day - 1;
+        return { col: (idx % 7) + 1, row: Math.floor(idx / 7) + 2 };
+    }
 
     for (let i = 0; i < emptyBefore; i++)
         grid.innerHTML += `<div class="calendar-day empty-day"></div>`;
 
+    // ── Day cells with single-day events only ──
     for (let day = 1; day <= daysInMonth; day++) {
         const ds      = `${year}-${pad(month+1)}-${pad(day)}`;
         const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
         let evHtml = '';
         events.forEach(ev => {
-            if (eventOnDate(ev, ds)) {
-                const c = clubColor(ev.clubName);
-                evHtml += `<a href="DetailedEvent.php?id=${ev.eventID}" style="text-decoration:none;color:inherit;display:block;"><div class="calendar-event-pill" data-color="${c}" title="${ev.eventTitle}">${ev.eventTitle}</div></a>`;
-            }
+            if (!eventOnDate(ev, ds)) return;
+            // Skip multi-day events — they render as bars below
+            if (ev.eventEndDate && ev.eventEndDate !== ev.eventDate) return;
+            const c = clubColor(ev.clubName);
+            evHtml += `<a href="DetailedEvent.php?id=${ev.eventID}" style="text-decoration:none;color:inherit;display:block;"><div class="calendar-event-pill" data-color="${c}" title="${ev.eventTitle}">${esc(ev.eventTitle)}</div></a>`;
         });
         grid.innerHTML += `
             <div class="calendar-day${isToday ? ' today-highlight' : ''}">
@@ -87,6 +97,37 @@ async function renderMonthView() {
                 <div class="event-list-container">${evHtml}</div>
             </div>`;
     }
+
+    // ── Multi-day event bars (grid-column spanning) ──
+    events.forEach(ev => {
+        if (!ev.eventEndDate || ev.eventEndDate === ev.eventDate) return;
+        if (ev.eventEndDate < mStart || ev.eventDate > mEnd) return;
+
+        const evStartD = ev.eventDate < mStart ? 1 : parseInt(ev.eventDate.slice(-2));
+        const evEndD   = ev.eventEndDate > mEnd ? daysInMonth : parseInt(ev.eventEndDate.slice(-2));
+
+        const startPos = dayGridPos(evStartD);
+        const endPos   = dayGridPos(evEndD);
+        const c        = clubColor(ev.clubName);
+
+        function addBar(row, colS, colE) {
+            const bar = document.createElement('div');
+            bar.className = 'calendar-multiday-bar';
+            bar.setAttribute('data-color', c);
+            bar.style.gridColumn = `${colS} / ${colE + 1}`;
+            bar.style.gridRow    = `${row}`;
+            bar.innerHTML = `<a href="DetailedEvent.php?id=${ev.eventID}" class="calendar-multiday-link">${esc(ev.eventTitle)}</a>`;
+            grid.appendChild(bar);
+        }
+
+        if (startPos.row === endPos.row) {
+            addBar(startPos.row, startPos.col, endPos.col);
+        } else {
+            addBar(startPos.row, startPos.col, 7);
+            for (let r = startPos.row + 1; r < endPos.row; r++) addBar(r, 1, 7);
+            addBar(endPos.row, 1, endPos.col);
+        }
+    });
 }
 
 // ─── WEEK VIEW ─────────────────────────────────────────────────────────────

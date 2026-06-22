@@ -822,12 +822,48 @@ input:focus {
 /* ── Week mode ── */
 .calendar-grid.week-mode .calendar-day:nth-child(n+16) { display: none; }
 
+/* ── Multi-day Event Bars ── */
+.calendar-multiday-bar {
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    align-self: start;
+    margin-top: 38px;
+    height: 20px;
+    line-height: 20px;
+    z-index: 2;
+    overflow: hidden;
+    pointer-events: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.calendar-multiday-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    padding: 0 7px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.calendar-multiday-bar[data-color="red"]    { background: #ED1C24; }
+.calendar-multiday-bar[data-color="green"]  { background: #16a34a; }
+.calendar-multiday-bar[data-color="blue"]   { background: #2563eb; }
+.calendar-multiday-bar[data-color="amber"]  { background: #d97706; }
+.calendar-multiday-bar[data-color="purple"] { background: #7c3aed; }
+.calendar-multiday-bar[data-color="red"]:hover    { background: #d41a1f; }
+.calendar-multiday-bar[data-color="green"]:hover  { background: #15803d; }
+.calendar-multiday-bar[data-color="blue"]:hover   { background: #1d4ed8; }
+.calendar-multiday-bar[data-color="amber"]:hover  { background: #b45309; }
+.calendar-multiday-bar[data-color="purple"]:hover { background: #6d28d9; }
+
 /* ── Event Pills ── */
 .event-list-container {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    margin-top: 4px;
+    margin-top: 24px;
 }
 
 .calendar-event-pill {
