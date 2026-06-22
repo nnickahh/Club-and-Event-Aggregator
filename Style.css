@@ -1726,6 +1726,7 @@ input:focus {
     overflow-y: auto;
     max-height: 640px;
     scroll-behavior: smooth;
+    scrollbar-gutter: stable;
 }
 .wtg-body::-webkit-scrollbar { width: 5px; }
 .wtg-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
