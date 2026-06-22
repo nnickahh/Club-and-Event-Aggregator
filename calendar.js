@@ -150,15 +150,22 @@ async function renderWeekView() {
         const evHTML = dayEvs.map(ev => {
             const col = clubColor(ev.clubName);
             let topPx = 0;
+            let evHeight = HOUR_H - 4;
             if (ev.eventTime) {
                 const [h, m] = ev.eventTime.split(':').map(Number);
                 topPx = Math.max(0, (h + m/60) * HOUR_H);
+                if (ev.eventEndTime) {
+                    const [eh, em] = ev.eventEndTime.split(':').map(Number);
+                    const endDec = eh + em/60;
+                    const startDec = h + m/60;
+                    evHeight = Math.max(HOUR_H - 4, (endDec - startDec) * HOUR_H);
+                }
             }
             const startLabel = ev.eventTime ? ampm(parseInt(ev.eventTime)) : '';
             const endLabel = ev.eventEndTime ? ampm(parseInt(ev.eventEndTime)) : '';
             const tLabel = startLabel + (endLabel ? ' — ' + endLabel : '');
             return `
-            <div class="wtg-event" data-color="${col}" style="top:${topPx}px; height:${HOUR_H-4}px;cursor:pointer;" onclick="window.location.href='DetailedEvent.php?id=${ev.eventID}'">
+            <div class="wtg-event" data-color="${col}" style="top:${topPx}px; height:${evHeight}px;cursor:pointer;" onclick="window.location.href='DetailedEvent.php?id=${ev.eventID}'">
                 <div class="wtg-event-inner">
                     <div class="wtg-event-title">${esc(ev.eventTitle)}</div>
                     ${tLabel ? `<div class="wtg-event-time">${tLabel}</div>` : ''}
