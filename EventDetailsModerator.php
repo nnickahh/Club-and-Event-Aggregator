@@ -78,9 +78,37 @@
                 $msgType = 'success';
                 $isEditing = false;
             } elseif ($action === 'delete') {
+                // Notify registered students
+                $regStmt = $conn->prepare("SELECT studentID FROM registrations WHERE eventID = ?");
+                $regStmt->bind_param("i", $eventID);
+                $regStmt->execute();
+                $regStudents = $regStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+                $regStmt->close();
+
+                $eStmt = $conn->prepare("SELECT eventTitle FROM events WHERE eventID = ?");
+                $eStmt->bind_param("i", $eventID);
+                $eStmt->execute();
+                $eRow = $eStmt->get_result()->fetch_assoc();
+                $eStmt->close();
+
+                if ($eRow && !empty($regStudents)) {
+                    $msg = $eRow['eventTitle'] . ' has been deleted by a moderator. If you have made any payment, please contact the club.';
+                    $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+                    foreach ($regStudents as $s) {
+                        $nStmt->bind_param("ssi", $s['studentID'], $msg, $eventID);
+                        $nStmt->execute();
+                    }
+                    $nStmt->close();
+                }
+
+                // Clean up related records
+                $conn->query("DELETE FROM registrations WHERE eventID = $eventID");
+                $conn->query("DELETE FROM waiting_list WHERE eventID = $eventID");
+
                 $stmt = $conn->prepare("DELETE FROM events WHERE eventID = ?");
                 $stmt->bind_param("i", $eventID);
                 $stmt->execute();
+                $_SESSION['flash_message'] = 'Event has been deleted successfully.';
                 header("Location: ModeratorEvents.php");
                 exit();
             }

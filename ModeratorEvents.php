@@ -11,6 +11,8 @@
     $currentPage = 'events';
     $tab = isset($_GET['tab']) ? $_GET['tab'] : 'pending';
     $today = date('Y-m-d');
+    $flashMessage = $_SESSION['flash_message'] ?? null;
+    unset($_SESSION['flash_message']);
     $events = [];
     $counts = ['pending' => 0, 'ongoing' => 0, 'upcoming' => 0, 'completed' => 0, 'cancelled' => 0];
 
@@ -82,6 +84,17 @@
                 <p class="mod-sub">Manage all events across campus.</p>
             </div>
         </div>
+
+        <?php if ($flashMessage): ?>
+        <div class="flash-overlay" id="flashPopup">
+            <div class="flash-box">
+                <div class="flash-icon">🎉</div>
+                <div class="flash-title">Done!</div>
+                <div class="flash-text"><?php echo htmlspecialchars($flashMessage); ?></div>
+                <button class="flash-btn" onclick="document.getElementById('flashPopup').style.display='none'">OK</button>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <div class="mod-tab-nav">
             <a href="ModeratorEvents.php?tab=pending" class="mod-tab-link <?php echo $tab === 'pending' ? 'active' : ''; ?>">
