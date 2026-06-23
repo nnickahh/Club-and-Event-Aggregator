@@ -53,6 +53,7 @@
                             <br><small class="notif-time"><?php echo date('d M h:i A', strtotime($n['created_at'])); ?></small>
                         </a>
                     <?php endforeach; ?>
+                    <a href="clear_notifications.php" class="clear-notif">Clear All</a>
                 <?php else: ?>
                     <a class="notif-empty">No new notifications</a>
                 <?php endif; ?>

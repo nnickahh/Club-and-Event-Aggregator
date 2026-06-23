@@ -3221,6 +3221,8 @@ body.is-editing-mode .hide-on-edit {
 .notif-sep { border:0; border-top:1px solid var(--border,#e2e8f0); margin:4px 0; }
 .notif-time { color:#94a3b8; }
 .notif-sup { color:var(--red); font-weight:700; }
+.clear-notif { display:block; text-align:center; font-size:11px; font-weight:600; color:var(--red); text-decoration:none; padding:8px; border-bottom:1px solid #f1f5f9; transition:background 0.15s; }
+.clear-notif:hover { background:#fef2f2; }
 
 /* ── Table utilities ── */
 .table-responsive { overflow-x:auto; }
