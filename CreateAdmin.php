@@ -59,6 +59,12 @@
                     $insert_stmt->bind_param("ssssss", $fullname, $admin_id, $club_name, $club_email, $hashed_password, $status);
                     
                     if ($insert_stmt->execute()) {
+                        // Notify moderators
+                        $modMsg = "New club registration pending review: " . $club_name;
+                        $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message) VALUES (?)");
+                        $modStmt->bind_param("s", $modMsg);
+                        $modStmt->execute();
+                        $modStmt->close();
                         // Store club name in session to show on the success page
                         $_SESSION['temp_club_name'] = $club_name;
                         header("Location: PendingApproval.php");

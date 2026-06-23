@@ -92,13 +92,15 @@
                 </a>
             </div>
             <div class="mod-stat-card">
-                <div class="mod-stat-icon green">
-                    <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
-                </div>
-                <div>
-                    <div class="mod-stat-num"><?php echo $activeClubs; ?></div>
-                    <div class="mod-stat-lbl">Active Clubs</div>
-                </div>
+                <a href="ModeratorClubs.php?tab=approved" class="stat-link">
+                    <div class="mod-stat-icon green">
+                        <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+                    </div>
+                    <div>
+                        <div class="mod-stat-num"><?php echo $activeClubs; ?></div>
+                        <div class="mod-stat-lbl">Active Clubs</div>
+                    </div>
+                </a>
             </div>
         </div>
 
@@ -110,7 +112,7 @@
                         <span class="mod-activity-dot"></span>
                         <span>
                             <span class="act-title"><?php echo htmlspecialchars($act['eventTitle']); ?></span>
-                            <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo (int)$act['adminID']; ?>" class="text-muted-link-inherit"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
+                            <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo urlencode($act['adminID']); ?>" class="text-muted-link-inherit"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
                             <span class="act-status">-
                                 <?php
                                     $s = $act['status'] ?? 'approved';

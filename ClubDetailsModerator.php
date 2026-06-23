@@ -66,7 +66,16 @@
 
                 $message = 'Club details updated successfully.';
                 $msgType = 'success';
-            } elseif ($action === 'delete') {
+                } elseif ($action === 'delete') {
+                // Notify moderators
+                $delName = trim($_POST['clubName'] ?? '');
+                if ($delName) {
+                    $modMsg = "Club '" . $delName . "' has been deleted.";
+                    $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message) VALUES (?)");
+                    $modStmt->bind_param("s", $modMsg);
+                    $modStmt->execute();
+                    $modStmt->close();
+                }
                 $stmt = $conn->prepare("DELETE FROM admins WHERE adminID = ?");
                 $stmt->bind_param("s", $adminID);
                 $stmt->execute();

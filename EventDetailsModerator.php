@@ -57,10 +57,27 @@
                 $message = 'Event has been approved successfully.';
                 $msgType = 'success';
             } elseif ($action === 'decline') {
-                $stmt = $conn->prepare("UPDATE events SET status = 'declined' WHERE eventID = ?");
-                $stmt->bind_param("i", $eventID);
-                $stmt->execute();
-                $message = 'Event has been declined.';
+                $declineReason = trim($_POST['decline_reason'] ?? '');
+                $eStmt = $conn->prepare("SELECT eventTitle, adminID FROM events WHERE eventID = ?");
+                $eStmt->bind_param("i", $eventID);
+                $eStmt->execute();
+                $eRow = $eStmt->get_result()->fetch_assoc();
+                $eStmt->close();
+                if ($eRow) {
+                    // Save decline reason and keep as pending (admin can resubmit)
+                    $rStmt = $conn->prepare("UPDATE events SET status = 'pending', decline_reason = ? WHERE eventID = ?");
+                    $rStmt->bind_param("si", $declineReason, $eventID);
+                    $rStmt->execute();
+                    $rStmt->close();
+                    // Notify admin
+                    $reasonText = $declineReason ? " Reason: " . $declineReason : '';
+                    $adminMsg = $eRow['eventTitle'] . ' requires changes.' . $reasonText;
+                    $aStmt = $conn->prepare("INSERT INTO notifications (adminID, message, eventID) VALUES (?, ?, ?)");
+                    $aStmt->bind_param("ssi", $eRow['adminID'], $adminMsg, $eventID);
+                    $aStmt->execute();
+                    $aStmt->close();
+                }
+                $message = 'Event has been declined. The admin can resubmit after making changes.';
                 $msgType = 'success';
             } elseif ($action === 'update') {
                 $title = $_POST['eventTitle'] ?? '';
@@ -91,14 +108,23 @@
                 $eRow = $eStmt->get_result()->fetch_assoc();
                 $eStmt->close();
 
-                if ($eRow && !empty($regStudents)) {
-                    $msg = $eRow['eventTitle'] . ' has been deleted by a moderator. If you have made any payment, please contact the club.';
-                    $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
-                    foreach ($regStudents as $s) {
-                        $nStmt->bind_param("ssi", $s['studentID'], $msg, $eventID);
-                        $nStmt->execute();
+                if ($eRow) {
+                    $title = $eRow['eventTitle'];
+                    if (!empty($regStudents)) {
+                        $msg = $title . ' has been deleted by a moderator. If you have made any payment, please contact the club.';
+                        $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+                        foreach ($regStudents as $s) {
+                            $nStmt->bind_param("ssi", $s['studentID'], $msg, $eventID);
+                            $nStmt->execute();
+                        }
+                        $nStmt->close();
                     }
-                    $nStmt->close();
+                    // Notify moderators
+                    $modMsg = $title . ' has been deleted.';
+                    $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message, eventID) VALUES (?, ?)");
+                    $modStmt->bind_param("si", $modMsg, $eventID);
+                    $modStmt->execute();
+                    $modStmt->close();
                 }
 
                 // Clean up related records
@@ -183,7 +209,7 @@
             <?php if (!empty($event['eventImage'])): ?>
                 <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" class="img-event-detail">
             <?php endif; ?>
-            <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
+            <a href="ClubDetailsModerator.php?id=<?php echo urlencode($event['adminID']); ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
 
             <?php if ($eventStatus === 'pending'): ?>
                 <span class="mod-pending-badge mt-10"><span class="mod-badge-dot"></span>Pending review</span>
@@ -300,6 +326,13 @@
                     <?php echo nl2br(htmlspecialchars($event['description'])); ?>
                 </p>
 
+                <?php if (!empty($event['decline_reason'])): ?>
+                <div style="background:var(--red-light);padding:12px 16px;border-radius:8px;margin-top:12px;">
+                    <strong style="color:var(--red);">Previously declined reason:</strong>
+                    <p style="color:var(--red);margin:4px 0 0;font-size:13px;"><?php echo nl2br(htmlspecialchars($event['decline_reason'])); ?></p>
+                </div>
+                <?php endif; ?>
+
                 <hr class="divider-light">
 
                 <h3>Registrations</h3>
@@ -345,10 +378,7 @@
                             <input type="hidden" name="action" value="approve">
                             <button type="submit" class="btn-approve">Approve Event</button>
                         </form>
-                        <form method="POST" onsubmit="return confirm('Are you sure you want to decline this event?');">
-                            <input type="hidden" name="action" value="decline">
-                            <button type="submit" class="btn-decline">Decline Event</button>
-                        </form>
+                        <button type="button" class="btn-decline" onclick="openDeclineModal()">Decline Event</button>
                     <?php elseif ($eventStatus === 'approved'): ?>
                         <a href="EventDetailsModerator.php?id=<?php echo $eventID; ?>&edit=1" class="btn-edit">Edit Event</a>
                         <form method="POST" onsubmit="return confirm('Are you sure you want to delete this event? This cannot be undone.');">
@@ -360,5 +390,35 @@
             <?php endif; ?>
         </article>
     </main>
+
+    <!-- Decline Reason Modal -->
+    <div id="declineModal" class="modal-overlay" onclick="if(event.target===this)closeDeclineModal()">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <button type="button" class="modal-close" onclick="closeDeclineModal()">&times;</button>
+            <h3>Decline Event</h3>
+            <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px;">Provide a reason for declining this event. The club admin will be notified.</p>
+            <form method="POST" id="declineForm">
+                <input type="hidden" name="action" value="decline">
+                <textarea name="decline_reason" class="form-textarea" placeholder="e.g. Insufficient details, conflicting date, inappropriate content..." rows="4" style="resize:vertical;width:100%;box-sizing:border-box;margin-bottom:16px;"></textarea>
+                <div class="modal-actions" style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn-secondary" onclick="closeDeclineModal()">Cancel</button>
+                    <button type="submit" class="btn-decline">Decline Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openDeclineModal() {
+            document.getElementById('declineModal').classList.add('active');
+        }
+        function closeDeclineModal() {
+            document.getElementById('declineModal').classList.remove('active');
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') document.getElementById('declineModal').classList.remove('active');
+        });
+    </script>
+
 </body>
 </html>

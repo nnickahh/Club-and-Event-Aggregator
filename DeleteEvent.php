@@ -35,7 +35,7 @@
     $regStmt->close();
 
     if (!empty($regStudents)) {
-        $msg = $event['eventTitle'] . ' has been deleted. If you have made any payment, please contact the club.';
+        $msg = $event['eventTitle'] . ' has been cancelled. If you have made any payment, please contact the club.';
         $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
         foreach ($regStudents as $s) {
             $nStmt->bind_param("ssi", $s['studentID'], $msg, $eventID);
@@ -52,7 +52,7 @@
     $subStmt->close();
 
     if (!empty($subStudents)) {
-        $subMsg = $event['eventTitle'] . ' has been deleted.';
+        $subMsg = $event['eventTitle'] . ' has been cancelled.';
         $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
         foreach ($subStudents as $s) {
             $nStmt->bind_param("ssi", $s['studentID'], $subMsg, $eventID);
@@ -61,17 +61,20 @@
         $nStmt->close();
     }
 
-    // Delete related registrations and waiting list entries
-    $conn->query("DELETE FROM registrations WHERE eventID = $eventID");
-    $conn->query("DELETE FROM waiting_list WHERE eventID = $eventID");
+    // Notify moderators
+    $modMsg = $event['eventTitle'] . ' has been cancelled by the club admin.';
+    $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message, eventID) VALUES (?, ?)");
+    $modStmt->bind_param("si", $modMsg, $eventID);
+    $modStmt->execute();
+    $modStmt->close();
 
-    // Delete the event
-    $stmt = $conn->prepare("DELETE FROM events WHERE eventID = ? AND adminID = ?");
+    // Cancel the event instead of deleting it
+    $stmt = $conn->prepare("UPDATE events SET status = 'cancelled' WHERE eventID = ? AND adminID = ?");
     $stmt->bind_param("is", $eventID, $adminID);
     $stmt->execute();
     $stmt->close();
 
-    $_SESSION['flash_message'] = 'Event has been deleted successfully.';
+    $_SESSION['flash_message'] = 'Event has been cancelled.';
     header("Location: AdminDashboard.php");
     exit();
 ?>

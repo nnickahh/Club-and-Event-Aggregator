@@ -84,6 +84,13 @@
                 $stmt->bind_param("sssssssissssssd", $adminID, $eventTitle, $eventDate, $eventEndDate, $eventTime, $eventEndTime, $venue, $capacity, $description, $eventImage, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $fee);
 
                 if ($stmt->execute()) {
+                    // Notify moderators
+                    $newEventId = $stmt->insert_id;
+                    $modMsg = "New event submitted for review: " . $eventTitle;
+                    $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message, eventID) VALUES (?, ?)");
+                    $modStmt->bind_param("si", $modMsg, $newEventId);
+                    $modStmt->execute();
+                    $modStmt->close();
                     $showSuccessPopup = true;
                 } else {
                     $message = "<p class='msg-error'>Error creating event. Please try again.</p>";
@@ -128,8 +135,7 @@
 
                 <div class="form-group">
                     <label>End Date :</label>
-                    <input type="date" name="eventEndDate" min="<?php echo date('Y-m-d'); ?>" placeholder="Leave blank for single-day event">
-                    <small class="text-xs-muted">Leave blank if the event is only one day.</small>
+                    <input type="date" name="eventEndDate" min="<?php echo date('Y-m-d'); ?>" placeholder="Leave blank if the event is only one day.">
                 </div>
 
                 <div class="form-group">

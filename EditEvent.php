@@ -165,6 +165,7 @@
     $isOngoing = $period === 'ongoing' && $event['status'] === 'approved';
     $isUpcoming = $period === 'upcoming' && $event['status'] === 'approved';
     $isPending = $event['status'] === 'pending';
+    $canEdit = $isPending || $isUpcoming;
 
     // Handle end event
     if (isset($_POST['end_event'])) {
@@ -193,6 +194,7 @@
             $upd->bind_param("ssssssisdsi", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newFee, $eventID, $adminID);
             $upd->execute();
             $upd->close();
+            $conn->query("UPDATE events SET decline_reason=NULL WHERE eventID=$eventID");
             // Refresh event data
             $event['eventTitle'] = $newTitle;
             $event['eventDate'] = $newDate;
@@ -203,7 +205,38 @@
             $event['capacity'] = $newCapacity;
             $event['description'] = $newDesc;
             $event['fee'] = $newFee;
+            $event['decline_reason'] = null;
             $fee = $newFee;
+        }
+    }
+
+    // Handle submit for approval (upcoming events or declined-pending → re-pending for moderator review)
+    if (isset($_POST['submit_for_approval']) && ($isUpcoming || ($isPending && !empty($event['decline_reason'])))) {
+        $newTitle = trim($_POST['eventTitle'] ?? '');
+        $newDate = $_POST['eventDate'] ?? '';
+        $newEndDate = !empty(trim($_POST['eventEndDate'] ?? '')) ? trim($_POST['eventEndDate']) : null;
+        $newTime = $_POST['eventTime'] ?? '';
+        $newEndTime = trim($_POST['eventEndTime'] ?? '') ?: null;
+        $newVenue = trim($_POST['venue'] ?? '');
+        $newCapacity = intval($_POST['capacity'] ?? 0);
+        $newDesc = trim($_POST['description'] ?? '');
+        $newFee = !empty(trim($_POST['fee'] ?? '')) ? floatval($_POST['fee']) : 0.00;
+
+        if ($newTitle && $newDate && $newTime && $newVenue && $newCapacity) {
+            $upd = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=?, fee=?, status='pending' WHERE eventID=? AND adminID=?");
+            $upd->bind_param("ssssssisdsi", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newFee, $eventID, $adminID);
+            $upd->execute();
+            $upd->close();
+            $conn->query("UPDATE events SET decline_reason=NULL WHERE eventID=$eventID");
+            // Notify moderators
+            $modMsg = $newTitle . ' has been updated and needs re-approval.';
+            $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message, eventID) VALUES (?, ?)");
+            $modStmt->bind_param("si", $modMsg, $eventID);
+            $modStmt->execute();
+            $modStmt->close();
+            $_SESSION['flash_message'] = 'Event changes submitted for moderator approval.';
+            header("Location: AdminDashboard.php");
+            exit();
         }
     }
 
@@ -323,18 +356,23 @@
         <a href="AdminDashboard.php" class="back-link">&larr; Back to Dashboard</a>
         <div class="flex-space-between">
             <h2 class="clubs-title"><?php echo htmlspecialchars($event['eventTitle']); ?></h2>
-            <?php if ($isPending): ?>
+            <?php if ($canEdit): ?>
             <div class="flex-row-nowrap">
                 <button onclick="toggleEdit()" id="editBtn" class="action-pill-btn">Edit</button>
-                <a href="DeleteEvent.php?id=<?php echo $eventID; ?>" class="btn-red-inline" onclick="return confirm('Delete this event?')">Delete</a>
+                <?php if ($isPending): ?>
+                <a href="DeleteEvent.php?id=<?php echo $eventID; ?>" class="btn-red-inline" onclick="return confirm('Cancel this event?')">Cancel</a>
+                <?php endif; ?>
+                <?php if ($isUpcoming): ?>
+                <form method="POST" onsubmit="return confirm('Cancel this event? Registered students and subscribers will be notified.');">
+                    <button type="submit" name="cancel_event" class="btn-outline-danger">Cancel Event</button>
+                </form>
+                <?php endif; ?>
             </div>
-            <?php elseif ($isOngoing || $isUpcoming): ?>
+            <?php elseif ($isOngoing): ?>
             <div class="flex-row-nowrap">
-                <?php if ($isOngoing): ?>
                 <form method="POST" onsubmit="return confirm('End this event and move it to completed?');">
                     <button type="submit" name="end_event" class="btn-outline-sm">End Event</button>
                 </form>
-                <?php endif; ?>
                 <form method="POST" onsubmit="return confirm('Cancel this event? Registered students and subscribers will be notified.');">
                     <button type="submit" name="cancel_event" class="btn-outline-danger">Cancel Event</button>
                 </form>
@@ -353,6 +391,12 @@
                     <p class="meta-line"><strong>Fee:</strong> <?php echo $fee > 0 ? 'RM' . number_format($fee, 2) : 'Free'; ?></p>
                     <p class="meta-line"><strong>Capacity:</strong> <?php echo (int)$event['capacity']; ?></p>
                     <p class="meta-line"><strong>Description:</strong> <?php echo nl2br(htmlspecialchars($event['description'])); ?></p>
+                    <?php if (!empty($event['decline_reason'])): ?>
+                        <p class="meta-line" style="background:var(--red-light);padding:10px 12px;border-radius:8px;margin-top:8px;">
+                            <strong style="color:var(--red);">Declined reason:</strong>
+                            <span style="color:var(--red);"><?php echo nl2br(htmlspecialchars($event['decline_reason'])); ?></span>
+                        </p>
+                    <?php endif; ?>
                     <?php if ($fee > 0 && !empty($event['payment_methods'])): ?>
                         <p class="meta-line"><strong>Payment:</strong>
                             <?php
@@ -363,7 +407,7 @@
                         </p>
                     <?php endif; ?>
                 </div>
-                <?php if ($isPending): ?>
+                <?php if ($canEdit): ?>
                 <div id="eventEdit" style="display:none;">
                     <form method="POST" id="editForm">
                         <div class="mb-10">
@@ -405,7 +449,11 @@
                         </div>
                         <div class="flex-end">
                             <button type="button" onclick="toggleEdit()" class="btn-secondary">Cancel</button>
+                            <?php if ($isUpcoming || !empty($event['decline_reason'])): ?>
+                            <button type="submit" name="submit_for_approval" class="btn-primary-sm">Submit for Approval</button>
+                            <?php else: ?>
                             <button type="submit" name="save_event" class="btn-primary-sm">Save Changes</button>
+                            <?php endif; ?>
                         </div>
                     </form>
                 </div>
@@ -457,7 +505,7 @@
                                 <th>Payment Method</th>
                                 <th>Payment Status</th>
                                 <?php if ($isOngoing): ?><th>Attendance</th><?php endif; ?>
-                                <th></th>
+                                <?php if (!$isOngoing): ?><th></th><?php endif; ?>
                             </tr>
                         </thead>
                         <tbody>
@@ -496,10 +544,12 @@
                                     </button>
                                 </td>
                                 <?php endif; ?>
+                                <?php if (!$isOngoing): ?>
                                 <td>
                                     <button class="remove-btn" title="Remove participant"
                                             onclick="openRemoveReg('<?php echo htmlspecialchars($p['studentID']); ?>','<?php echo htmlspecialchars($p['name']); ?>')">✕</button>
                                 </td>
+                                <?php endif; ?>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -553,11 +603,11 @@
                                 <td>
                                     <form method="POST" style="display:inline;">
                                         <input type="hidden" name="wait_id" value="<?php echo (int)$w['waitID']; ?>">
-                                        <button type="submit" name="promote_waitlist" class="promote-btn" title="Move to registered">Move</button>
+                                        <button type="submit" name="promote_waitlist" class="promote-btn" title="Move to registered"><?php echo $isOngoing ? 'Add' : 'Move'; ?></button>
                                     </form>
                                     <form method="POST" style="display:inline;" onsubmit="return confirm('Remove this student from the waiting list?');">
                                         <input type="hidden" name="wait_id" value="<?php echo (int)$w['waitID']; ?>">
-                                        <button type="submit" name="remove_waitlist" class="remove-btn" title="Remove">✕</button>
+                                        <button type="submit" name="remove_waitlist" class="remove-btn" title="Remove">Remove</button>
                                     </form>
                                 </td>
                             </tr>

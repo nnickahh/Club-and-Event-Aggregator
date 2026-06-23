@@ -14,6 +14,10 @@
         $upd->bind_param("s", $aid);
         $upd->execute();
         $upd->close();
+    } elseif (isset($_SESSION['role']) && $_SESSION['role'] === 'moderator') {
+        $upd = $conn->prepare("UPDATE moderator_notifications SET is_read = 1 WHERE is_read = 0");
+        $upd->execute();
+        $upd->close();
     }
 
     $redirect = $_SERVER['HTTP_REFERER'] ?? 'StudentDashboard.php';

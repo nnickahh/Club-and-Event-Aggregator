@@ -178,6 +178,16 @@
         error_log('DB eventEndDate migration error: ' . $e->getMessage());
     }
 
+    // Add `decline_reason` column to `events` table (for moderator decline feedback)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'decline_reason'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN decline_reason TEXT DEFAULT NULL AFTER description");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB decline_reason migration error: ' . $e->getMessage());
+    }
+
     // Add `socialMedia` column to `clubs` table if it doesn't exist (for club social links)
     try {
         $check = $conn->query("SHOW COLUMNS FROM clubs LIKE 'socialMedia'");
@@ -293,6 +303,20 @@
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } catch (mysqli_sql_exception $e) {
         error_log('DB waiting_list table creation error: ' . $e->getMessage());
+    }
+
+    // Create `moderator_notifications` table
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS moderator_notifications (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            message VARCHAR(500) NOT NULL,
+            eventID INT UNSIGNED DEFAULT NULL,
+            clubID INT UNSIGNED DEFAULT NULL,
+            is_read TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB moderator_notifications table creation error: ' . $e->getMessage());
     }
 
 // ─── Helper functions ──────────────────────────────────────
