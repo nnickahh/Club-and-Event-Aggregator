@@ -1,21 +1,27 @@
 // calendar.js
 let currentDate = new Date();
 let currentView = 'month';
+const calendarEventsEndpoint = window.CALENDAR_EVENTS_ENDPOINT || 'get_events.php';
+const calendarEventDetailPrefix = window.CALENDAR_EVENT_DETAIL_PREFIX || 'DetailedEvent.php?id=';
+const calendarColorByEvent = Boolean(window.CALENDAR_COLOR_BY_EVENT);
 
 const monthNames    = ["January","February","March","April","May","June",
                        "July","August","September","October","November","December"];
 const dayNamesShort = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-const colorPalette  = ['red','green','blue','amber','purple'];
+const colorPalette  = ['red','green','blue','amber','purple','teal','pink','orange','slate'];
 function clubColor(clubName) {
     let h = 0;
     const s = (clubName || '').toLowerCase();
     for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i);
     return colorPalette[Math.abs(h) % colorPalette.length];
 }
+function calendarEventColor(ev, indexInDay) {
+    return calendarColorByEvent ? colorPalette[indexInDay % colorPalette.length] : clubColor(ev.clubName);
+}
 
 // ─── Fetch ─────────────────────────────────────────────────────────────────
 async function fetchEvents() {
-    try { return await (await fetch('get_events.php')).json(); }
+    try { return await (await fetch(calendarEventsEndpoint)).json(); }
     catch(e) { console.error(e); return []; }
 }
 
@@ -29,6 +35,21 @@ function esc(s) {
 function eventOnDate(ev, dateStr) {
     if (!ev.eventEndDate || ev.eventEndDate === ev.eventDate) return ev.eventDate === dateStr;
     return dateStr >= ev.eventDate && dateStr <= ev.eventEndDate;
+}
+function eventStartMinutes(ev) {
+    if (!ev.eventTime) return 0;
+    const [h, m] = ev.eventTime.split(':').map(Number);
+    return (h * 60) + (m || 0);
+}
+function eventEndMinutes(ev) {
+    if (!ev.eventEndTime) return eventStartMinutes(ev) + 60;
+    const [h, m] = ev.eventEndTime.split(':').map(Number);
+    const end = (h * 60) + (m || 0);
+    const start = eventStartMinutes(ev);
+    return end > start ? end : start + 60;
+}
+function eventsOverlap(a, b) {
+    return eventStartMinutes(a) < eventEndMinutes(b) && eventStartMinutes(b) < eventEndMinutes(a);
 }
 // Convert hour integer to 12-hour AM/PM label
 function ampm(h) {
@@ -75,10 +96,11 @@ async function renderMonthView() {
         const ds      = `${year}-${pad(month+1)}-${pad(day)}`;
         const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
         let evHtml = '';
-        events.forEach(ev => {
+        const dayEvents = events.filter(ev => eventOnDate(ev, ds));
+        dayEvents.forEach((ev, eventIndex) => {
             if (eventOnDate(ev, ds)) {
-                const c = clubColor(ev.clubName);
-                evHtml += `<a href="DetailedEvent.php?id=${ev.eventID}" style="text-decoration:none;color:inherit;display:block;"><div class="calendar-event-pill" data-color="${c}" title="${ev.eventTitle}">${ev.eventTitle}</div></a>`;
+                const c = calendarEventColor(ev, eventIndex);
+                evHtml += `<a href="${calendarEventDetailPrefix}${ev.eventID}" style="text-decoration:none;color:inherit;display:block;"><div class="calendar-event-pill" data-color="${c}" title="${ev.eventTitle}">${ev.eventTitle}</div></a>`;
             }
         });
         grid.innerHTML += `
@@ -140,15 +162,21 @@ async function renderWeekView() {
     const colsHTML = days.map(d => {
         const ds      = toDs(d);
         const isToday = ds === todayStr;
-        const dayEvs  = wEvents.filter(e => eventOnDate(e, ds));
+        const dayEvs  = wEvents
+            .filter(e => eventOnDate(e, ds))
+            .sort((a, b) => eventStartMinutes(a) - eventStartMinutes(b) || String(a.eventTitle || '').localeCompare(String(b.eventTitle || '')));
 
         // Exactly HOURS rows — no more, no less
         const rowsHTML = Array.from({length: HOURS}, () =>
             `<div class="wtg-hour-row" style="height:${HOUR_H}px"></div>`
         ).join('');
 
-        const evHTML = dayEvs.map(ev => {
-            const col = clubColor(ev.clubName);
+        const evHTML = dayEvs.map((ev, eventIndex) => {
+            const col = calendarEventColor(ev, eventIndex);
+            const overlapSlot = calendarColorByEvent
+                ? Math.min(4, dayEvs.slice(0, eventIndex).filter(other => eventsOverlap(other, ev)).length)
+                : 0;
+            const sideOffset = 4 + (overlapSlot * 7);
             let topPx = 0;
             let evHeight = HOUR_H - 4;
             if (ev.eventTime) {
@@ -165,7 +193,7 @@ async function renderWeekView() {
             const endLabel = ev.eventEndTime ? ampm(parseInt(ev.eventEndTime)) : '';
             const tLabel = startLabel + (endLabel ? ' — ' + endLabel : '');
             return `
-            <div class="wtg-event" data-color="${col}" style="top:${topPx}px; height:${evHeight}px;cursor:pointer;" onclick="window.location.href='DetailedEvent.php?id=${ev.eventID}'">
+            <div class="wtg-event" data-color="${col}" style="top:${topPx}px; height:${evHeight}px; left:${sideOffset}px; right:4px; z-index:${2 + eventIndex}; cursor:pointer;" onclick="window.location.href='${calendarEventDetailPrefix}${ev.eventID}'">
                 <div class="wtg-event-inner">
                     <div class="wtg-event-title">${esc(ev.eventTitle)}</div>
                     ${tLabel ? `<div class="wtg-event-time">${tLabel}</div>` : ''}

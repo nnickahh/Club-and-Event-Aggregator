@@ -13,8 +13,20 @@
     session_write_close();
 
     $adminID = $_SESSION['admin_id'];
+    $clubName = $_SESSION['club_name'] ?? '';
     $message = "";
     $showSuccessPopup = false;
+
+    function prepareUploadDirectory($relativeDir) {
+        $relativeDir = trim($relativeDir, '/');
+        $absoluteDir = __DIR__ . '/' . $relativeDir;
+
+        if (!is_dir($absoluteDir) && !@mkdir($absoluteDir, 0775, true)) {
+            return false;
+        }
+
+        return is_writable($absoluteDir) ? $absoluteDir . '/' : false;
+    }
 
     // Handle Form Processing when user clicks submit
     if (isset($_POST["submit"])) {
@@ -29,12 +41,22 @@
         $fee        = !empty(trim($_POST['fee'])) ? floatval($_POST['fee']) : 0.00;
         $eventImage  = null;
 
+        if ($eventEndDate !== null && $eventEndDate < $eventDate) {
+            $message = "<p class='msg-error'>End date is before the event date. Please choose a correct date.</p>";
+        }
+
+        $isSingleDayEvent = $eventEndDate === null || $eventEndDate === $eventDate;
+        if (empty($message) && $isSingleDayEvent && $eventEndTime !== null && $eventEndTime <= $eventTime) {
+            $message = "<p class='msg-error'>End time is before the event time. Please choose a correct time.</p>";
+        }
+
         // Handle image upload
-        if (isset($_FILES['eventImage']) && $_FILES['eventImage']['error'] === UPLOAD_ERR_OK) {
-            $uploadDir = 'uploads/events/';
+        if (empty($message) && isset($_FILES['eventImage']) && $_FILES['eventImage']['error'] === UPLOAD_ERR_OK) {
             $fileName = time() . '_' . basename($_FILES['eventImage']['name']);
-            $targetPath = $uploadDir . $fileName;
-            $imageFileType = strtolower(pathinfo($targetPath, PATHINFO_EXTENSION));
+            $uploadDir = prepareUploadDirectory('uploads/events');
+            $relativePath = 'uploads/events/' . $fileName;
+            $targetPath = $uploadDir ? $uploadDir . $fileName : '';
+            $imageFileType = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
 
             // Validate file type
             $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
@@ -42,8 +64,10 @@
                 $message = "<p class='msg-error'>Only JPG, JPEG, PNG, GIF & WEBP files are allowed.</p>";
             } elseif ($_FILES['eventImage']['size'] > 5 * 1024 * 1024) {
                 $message = "<p class='msg-error'>File size must be less than 5MB.</p>";
+            } elseif (!$uploadDir) {
+                $message = "<p class='msg-error'>Upload folder is not writable. Please check the uploads/events folder permission.</p>";
             } elseif (move_uploaded_file($_FILES['eventImage']['tmp_name'], $targetPath)) {
-                $eventImage = $targetPath;
+                $eventImage = $relativePath;
             } else {
                 $message = "<p class='msg-error'>Failed to upload image.</p>";
             }
@@ -55,33 +79,72 @@
         $tngQr = null;
         $bankDetails = null;
 
-        if ($paymentMethods && strpos($paymentMethods, 'tng') !== false) {
+        if (empty($message) && $paymentMethods && strpos($paymentMethods, 'tng') !== false) {
             $tngPhone = !empty(trim($_POST['tng_phone'])) ? trim($_POST['tng_phone']) : null;
+            if ($tngPhone === null) {
+                $message = "<p class='msg-error'>TNG phone number is required.</p>";
+            } elseif (!ctype_digit($tngPhone)) {
+                $message = "<p class='msg-error'>Only numbers allowed.</p>";
+            }
             if (isset($_FILES['tng_qr']) && $_FILES['tng_qr']['error'] === UPLOAD_ERR_OK) {
-                $qrDir = 'uploads/payments/';
-                if (!is_dir($qrDir)) mkdir($qrDir, 0777, true);
                 $qrName = time() . '_qr_' . basename($_FILES['tng_qr']['name']);
-                $qrPath = $qrDir . $qrName;
-                $qrType = strtolower(pathinfo($qrPath, PATHINFO_EXTENSION));
-                if (in_array($qrType, ['jpg','jpeg','png','gif','webp']) && move_uploaded_file($_FILES['tng_qr']['tmp_name'], $qrPath)) {
-                    $tngQr = $qrPath;
+                $qrDir = prepareUploadDirectory('uploads/payments');
+                $relativeQrPath = 'uploads/payments/' . $qrName;
+                $qrPath = $qrDir ? $qrDir . $qrName : '';
+                $qrType = strtolower(pathinfo($relativeQrPath, PATHINFO_EXTENSION));
+                if (!in_array($qrType, ['jpg','jpeg','png','gif','webp'])) {
+                    $message = "<p class='msg-error'>Only JPG, JPEG, PNG, GIF & WEBP QR files are allowed.</p>";
+                } elseif (!$qrDir) {
+                    $message = "<p class='msg-error'>Upload folder is not writable. Please check the uploads/payments folder permission.</p>";
+                } elseif (move_uploaded_file($_FILES['tng_qr']['tmp_name'], $qrPath)) {
+                    $tngQr = $relativeQrPath;
+                } else {
+                    $message = "<p class='msg-error'>Failed to upload Touch 'n Go QR image.</p>";
                 }
             }
         }
 
-        if ($paymentMethods && strpos($paymentMethods, 'bank_in') !== false) {
+        if (empty($message) && $paymentMethods && strpos($paymentMethods, 'bank_in') !== false) {
             $bankData = [];
-            if (!empty(trim($_POST['bank_name']))) $bankData['bank_name'] = trim($_POST['bank_name']);
-            if (!empty(trim($_POST['bank_account']))) $bankData['bank_account'] = trim($_POST['bank_account']);
-            if (!empty(trim($_POST['bank_holder']))) $bankData['bank_holder'] = trim($_POST['bank_holder']);
+            if (empty(trim($_POST['bank_name']))) {
+                $message = "<p class='msg-error'>Bank name is required.</p>";
+            } else {
+                $bankData['bank_name'] = trim($_POST['bank_name']);
+            }
+            if (empty($message) && empty(trim($_POST['bank_account']))) {
+                $message = "<p class='msg-error'>Bank account number is required.</p>";
+            } elseif (empty($message)) {
+                $bankAccount = trim($_POST['bank_account']);
+                if (!ctype_digit($bankAccount)) {
+                    $message = "<p class='msg-error'>Only numbers allowed.</p>";
+                } else {
+                    $bankData['bank_account'] = $bankAccount;
+                }
+            }
+            if (empty($message) && empty(trim($_POST['bank_holder']))) {
+                $message = "<p class='msg-error'>Account holder name is required.</p>";
+            } elseif (empty($message)) {
+                $bankData['bank_holder'] = trim($_POST['bank_holder']);
+            }
             if (!empty($bankData)) $bankDetails = json_encode($bankData);
         }
 
+        if (empty($message) && empty($clubName)) {
+            $clubStmt = $conn->prepare("SELECT clubName FROM admins WHERE adminID = ?");
+            $clubStmt->bind_param("s", $adminID);
+            $clubStmt->execute();
+            $clubResult = $clubStmt->get_result();
+            if ($clubRow = $clubResult->fetch_assoc()) {
+                $clubName = $clubRow['clubName'];
+            }
+            $clubStmt->close();
+        }
+
         if (empty($message)) {
-            $stmt = $conn->prepare("INSERT INTO events (adminID, eventTitle, eventDate, eventEndDate, eventTime, eventEndTime, venue, capacity, description, eventImage, status, payment_methods, tng_phone, tng_qr, bank_details, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)");
+            $stmt = $conn->prepare("INSERT INTO events (adminID, clubName, eventTitle, eventDate, eventEndDate, eventTime, eventEndTime, venue, capacity, description, eventImage, status, payment_methods, tng_phone, tng_qr, bank_details, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)");
 
             if ($stmt) {
-                $stmt->bind_param("sssssssissssssd", $adminID, $eventTitle, $eventDate, $eventEndDate, $eventTime, $eventEndTime, $venue, $capacity, $description, $eventImage, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $fee);
+                $stmt->bind_param("ssssssssissssssd", $adminID, $clubName, $eventTitle, $eventDate, $eventEndDate, $eventTime, $eventEndTime, $venue, $capacity, $description, $eventImage, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $fee);
 
                 if ($stmt->execute()) {
                     // Notify moderators
@@ -130,12 +193,12 @@
 
                 <div class="form-group">
                     <label>Event Date :</label>
-                    <input type="date" name="eventDate" min="<?php echo date('Y-m-d'); ?>" required>
+                    <input type="date" name="eventDate" id="eventDateInput" min="<?php echo date('Y-m-d'); ?>" required>
                 </div>
 
                 <div class="form-group">
                     <label>End Date :</label>
-                    <input type="date" name="eventEndDate" min="<?php echo date('Y-m-d'); ?>" placeholder="Leave blank if the event is only one day.">
+                    <input type="date" name="eventEndDate" id="eventEndDateInput" min="<?php echo date('Y-m-d'); ?>" placeholder="Leave blank if the event is only one day.">
                 </div>
 
                 <div class="form-group">
@@ -189,8 +252,8 @@
                     <div id="tngFields" class="payment-section">
                         <p class="payment-section-title">TNG Payment Details</p>
                         <div style="margin-bottom:10px;">
-                            <label class="form-label-sm">Phone Number (optional)</label>
-                            <input type="text" name="tng_phone" placeholder="e.g., 012-3456789" class="form-input">
+                            <label class="form-label-sm">Phone Number</label>
+                            <input type="text" name="tng_phone" placeholder="e.g., 0123456789" inputmode="numeric" pattern="[0-9]*" oninvalid="this.setCustomValidity(this.value ? 'Only numbers allowed' : 'Please fill out this field')" oninput="this.setCustomValidity(''); this.value=this.value.replace(/[^0-9]/g,'')" class="form-input">
                         </div>
                         <div>
                             <label class="form-label-sm">QR Code Image (optional)</label>
@@ -202,15 +265,15 @@
                         <p class="payment-section-title">Bank In Details</p>
                         <div style="margin-bottom:10px;">
                             <label class="form-label-sm">Bank Name</label>
-                            <input type="text" name="bank_name" placeholder="e.g., CIMB Bank" class="form-input">
+                            <input type="text" name="bank_name" placeholder="e.g., CIMB Bank" oninvalid="this.setCustomValidity('Please fill out this field')" oninput="this.setCustomValidity('')" class="form-input">
                         </div>
                         <div style="margin-bottom:10px;">
                             <label class="form-label-sm">Account Number</label>
-                            <input type="text" name="bank_account" placeholder="e.g., 1234-567-890" class="form-input">
+                            <input type="text" name="bank_account" placeholder="e.g., 1234567890" inputmode="numeric" pattern="[0-9]*" oninvalid="this.setCustomValidity(this.value ? 'Only numbers allowed' : 'Please fill out this field')" oninput="this.setCustomValidity(''); this.value=this.value.replace(/[^0-9]/g,'')" class="form-input">
                         </div>
                         <div>
                             <label class="form-label-sm">Account Holder Name</label>
-                            <input type="text" name="bank_holder" placeholder="e.g., John Doe" class="form-input">
+                            <input type="text" name="bank_holder" placeholder="e.g., John Doe" oninvalid="this.setCustomValidity('Please fill out this field')" oninput="this.setCustomValidity('')" class="form-input">
                         </div>
                     </div>
                 </div>
@@ -235,12 +298,67 @@
     </div>
     <?php else: ?>
     <script>
+    const eventDateInput = document.getElementById('eventDateInput');
+    const eventEndDateInput = document.getElementById('eventEndDateInput');
+    const eventTimeInput = document.querySelector('input[name="eventTime"]');
+    const eventEndTimeInput = document.querySelector('input[name="eventEndTime"]');
+
+    function validateEventDateRange() {
+        if (eventDateInput && eventEndDateInput && eventEndDateInput.value && eventDateInput.value && eventEndDateInput.value < eventDateInput.value) {
+            eventEndDateInput.setCustomValidity('End date is before the event date. Please choose a correct date.');
+        } else if (eventEndDateInput) {
+            eventEndDateInput.setCustomValidity('');
+        }
+    }
+
+    function validateEventTimeRange() {
+        if (!eventTimeInput || !eventEndTimeInput || !eventDateInput || !eventEndDateInput) return;
+        const singleDay = !eventEndDateInput.value || eventEndDateInput.value === eventDateInput.value;
+        if (singleDay && eventEndTimeInput.value && eventTimeInput.value && eventEndTimeInput.value <= eventTimeInput.value) {
+            eventEndTimeInput.setCustomValidity('End time is before the event time. Please choose a correct time.');
+        } else {
+            eventEndTimeInput.setCustomValidity('');
+        }
+    }
+
+    if (eventDateInput && eventEndDateInput) {
+        eventDateInput.addEventListener('change', validateEventDateRange);
+        eventEndDateInput.addEventListener('change', validateEventDateRange);
+        eventDateInput.addEventListener('change', validateEventTimeRange);
+        eventEndDateInput.addEventListener('change', validateEventTimeRange);
+    }
+    if (eventTimeInput && eventEndTimeInput) {
+        eventTimeInput.addEventListener('change', validateEventTimeRange);
+        eventEndTimeInput.addEventListener('change', validateEventTimeRange);
+    }
+
     function togglePaymentFields() {
         const tng = document.querySelector('input[name="payment_methods[]"][value="tng"]');
         const bank = document.querySelector('input[name="payment_methods[]"][value="bank_in"]');
+        const tngPhone = document.querySelector('input[name="tng_phone"]');
+        const bankName = document.querySelector('input[name="bank_name"]');
+        const bankAccount = document.querySelector('input[name="bank_account"]');
+        const bankHolder = document.querySelector('input[name="bank_holder"]');
         document.getElementById('tngFields').style.display = tng && tng.checked ? 'block' : 'none';
         document.getElementById('bankFields').style.display = bank && bank.checked ? 'block' : 'none';
+        if (tngPhone) {
+            tngPhone.required = !!(tng && tng.checked);
+            if (!tngPhone.required) tngPhone.setCustomValidity('');
+        }
+        if (bankName) {
+            bankName.required = !!(bank && bank.checked);
+            if (!bankName.required) bankName.setCustomValidity('');
+        }
+        if (bankAccount) {
+            bankAccount.required = !!(bank && bank.checked);
+            if (!bankAccount.required) bankAccount.setCustomValidity('');
+        }
+        if (bankHolder) {
+            bankHolder.required = !!(bank && bank.checked);
+            if (!bankHolder.required) bankHolder.setCustomValidity('');
+        }
     }
+    togglePaymentFields();
     </script>
     <?php endif; ?>
 

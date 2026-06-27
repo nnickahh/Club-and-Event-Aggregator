@@ -6,13 +6,12 @@
         header("Location: ModeratorLogin.php");
         exit();
     }
-    session_write_close();
-
     $currentPage = 'events';
     $tab = isset($_GET['tab']) ? $_GET['tab'] : 'pending';
     $today = date('Y-m-d');
     $flashMessage = $_SESSION['flash_message'] ?? null;
     unset($_SESSION['flash_message']);
+    session_write_close();
     $events = [];
     $counts = ['pending' => 0, 'ongoing' => 0, 'upcoming' => 0, 'completed' => 0, 'cancelled' => 0];
 
@@ -57,6 +56,15 @@
     } catch (mysqli_sql_exception $e) {
         error_log('ModeratorEvents DB error: ' . $e->getMessage());
     }
+
+    $eventClubNames = [];
+    foreach ($events as $event) {
+        $clubName = trim($event['club_name'] ?? '');
+        if ($clubName !== '') {
+            $eventClubNames[strtolower($clubName)] = $clubName;
+        }
+    }
+    natcasesort($eventClubNames);
 
     $pendingClubs = 0;
     $r = $conn->query("SELECT COUNT(*) AS c FROM admins WHERE status = 'pending'");
@@ -114,10 +122,39 @@
             </a>
         </div>
 
+        <div class="search-toolbar">
+            <div class="search-wrap">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="modEventSearch" class="search-bar" placeholder="Search events by name, club, or venue...">
+            </div>
+            <button type="button" class="filter-chip active" data-eventfilter="all">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                All events
+            </button>
+            <button type="button" class="filter-chip" data-eventfilter="week">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+                This week
+            </button>
+            <select id="modEventClubFilter" class="club-filter-dropdown">
+                <option value="">All clubs</option>
+                <?php foreach ($eventClubNames as $clubValue => $clubLabel): ?>
+                    <option value="<?php echo htmlspecialchars($clubValue, ENT_QUOTES); ?>"><?php echo htmlspecialchars($clubLabel); ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <p class="section-label" id="modEventResultCount">
+            <?php echo count($events); ?> event<?php echo count($events) !== 1 ? 's' : ''; ?> found
+        </p>
+
         <section class="event-grid">
             <?php if (!empty($events)): ?>
                 <?php foreach ($events as $event): ?>
-                    <article class="event-card">
+                    <article class="event-card mod-events-card"
+                             data-title="<?php echo htmlspecialchars(strtolower($event['eventTitle'] ?? ''), ENT_QUOTES); ?>"
+                             data-club="<?php echo htmlspecialchars(strtolower($event['club_name'] ?? ''), ENT_QUOTES); ?>"
+                             data-venue="<?php echo htmlspecialchars(strtolower($event['venue'] ?? ''), ENT_QUOTES); ?>"
+                             data-date="<?php echo htmlspecialchars($event['eventDate'] ?? '', ENT_QUOTES); ?>">
                         <div class="card-stripe" data-color="<?php echo $tab === 'completed' ? 'green' : ($tab === 'cancelled' ? 'red' : ($tab === 'pending' ? 'amber' : ($tab === 'ongoing' ? 'blue' : 'purple'))); ?>"></div>
                         <?php if (!empty($event['eventImage'])): ?>
                             <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" class="img-event-card">
@@ -140,7 +177,11 @@
                             <div class="event-meta">
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-                                    <span><?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?> at <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></span>
+                                    <span><?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?></span>
+                                </div>
+                                <div class="meta-row">
+                                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    <span><?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></span>
                                 </div>
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -154,7 +195,15 @@
 
                             <div class="card-divider"></div>
 
-                            <a href="EventDetailsModerator.php?id=<?php echo $event['eventID']; ?>" class="btn-mod-details">Details</a>
+                            <div class="mod-card-actions <?php echo $tab === 'cancelled' ? 'equal-action-buttons moderator-cancelled-actions' : 'mod-single-action-center'; ?>">
+                                <a href="EventDetailsModerator.php?id=<?php echo $event['eventID']; ?>" class="btn-mod-details">Details</a>
+                                <?php if ($tab === 'cancelled'): ?>
+                                    <form method="POST" action="DeleteCancelledEvent.php" onsubmit="return confirm('Permanently delete this cancelled event record? This cannot be undone.');">
+                                        <input type="hidden" name="event_id" value="<?php echo (int)$event['eventID']; ?>">
+                                        <button type="submit" class="btn-outline-danger btn-mod-delete">Delete Record</button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </article>
                 <?php endforeach; ?>
@@ -167,8 +216,58 @@
                     <p class="empty-subtext">There are no events in this category right now.</p>
                 </div>
             <?php endif; ?>
+            <div class="event-empty-box" id="modEventNoResults" style="display:none;">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <p>No matching events</p>
+                <p class="empty-subtext">Try a different search or filter.</p>
+            </div>
         </section>
 
     </main>
+    <script>
+        const modEventSearch = document.getElementById('modEventSearch');
+        const modEventClubFilter = document.getElementById('modEventClubFilter');
+        const modEventCount = document.getElementById('modEventResultCount');
+        const modEventNoResults = document.getElementById('modEventNoResults');
+        const modEventCards = document.querySelectorAll('.event-card');
+
+        function applyModeratorEventFilters() {
+            const q = modEventSearch.value.toLowerCase().trim();
+            const activeFilter = document.querySelector('[data-eventfilter].active');
+            const filter = activeFilter ? activeFilter.dataset.eventfilter : 'all';
+            const club = modEventClubFilter.value;
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            const weekLimit = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000));
+            let visible = 0;
+
+            modEventCards.forEach(card => {
+                let show = true;
+                if (q && !card.dataset.title.includes(q) && !card.dataset.club.includes(q) && !card.dataset.venue.includes(q)) show = false;
+                if (club && card.dataset.club !== club) show = false;
+                if (filter === 'week') {
+                    const eventDate = new Date(card.dataset.date);
+                    show = show && eventDate >= now && eventDate <= weekLimit;
+                }
+                card.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+
+            modEventCount.textContent = visible + ' event' + (visible !== 1 ? 's' : '') + ' found';
+            modEventNoResults.style.display = visible === 0 && modEventCards.length > 0 ? '' : 'none';
+        }
+
+        modEventSearch.addEventListener('input', applyModeratorEventFilters);
+        modEventClubFilter.addEventListener('change', applyModeratorEventFilters);
+        document.querySelectorAll('[data-eventfilter]').forEach(btn => {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('[data-eventfilter]').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                applyModeratorEventFilters();
+            });
+        });
+    </script>
 </body>
 </html>

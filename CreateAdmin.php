@@ -38,14 +38,41 @@
             $message = "<p class='msg-error'>Passwords do not match!</p>";
         }
         else {
-            // 2. Check if AdminID or Club Email exists (Prepared Statement)
-            $check_stmt = $conn->prepare("SELECT adminID FROM admins WHERE adminID = ? OR clubEmail = ?");
-            $check_stmt->bind_param("ss", $admin_id, $club_email);
+            // 2. Check duplicate values separately so the user knows what to fix.
+            $check_stmt = $conn->prepare("SELECT adminID, clubName, clubEmail FROM admins WHERE adminID = ? OR clubName = ? OR clubEmail = ?");
+            $check_stmt->bind_param("sss", $admin_id, $club_name, $club_email);
             $check_stmt->execute();
             $check_result = $check_stmt->get_result();
 
             if ($check_result->num_rows > 0) {
-                $message = "<p class='msg-error'>Admin ID or Club Email already exists!</p>";
+                $id_exists = false;
+                $club_exists = false;
+                $email_exists = false;
+
+                while ($existing = $check_result->fetch_assoc()) {
+                    if (strcasecmp($existing['adminID'], $admin_id) === 0) {
+                        $id_exists = true;
+                    }
+                    if (strcasecmp($existing['clubName'], $club_name) === 0) {
+                        $club_exists = true;
+                    }
+                    if (strcasecmp($existing['clubEmail'], $club_email) === 0) {
+                        $email_exists = true;
+                    }
+                }
+
+                $errors = [];
+                if ($id_exists) {
+                    $errors[] = "Staff ID / Student ID already exists. Please use another ID.";
+                }
+                if ($club_exists) {
+                    $errors[] = "Club Name already exists. Please use another club name.";
+                }
+                if ($email_exists) {
+                    $errors[] = "Club Email already exists. Please use another club email.";
+                }
+
+                $message = "<p class='msg-error'>" . implode("<br>", $errors) . "</p>";
             } else {
                 // 3. Hash the password using Bcrypt
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);

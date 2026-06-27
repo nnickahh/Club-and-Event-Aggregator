@@ -31,7 +31,36 @@
         if ($result) { $activeClubs = $result->fetch_assoc()['cnt']; }
 
         $result = $conn->query("SELECT e.*, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID ORDER BY e.created_at DESC LIMIT 10");
-        if ($result) { $recentActivity = $result->fetch_all(MYSQLI_ASSOC); }
+        if ($result) {
+            $events = $result->fetch_all(MYSQLI_ASSOC);
+            foreach ($events as $event) {
+                $event['activity_type'] = 'event';
+                $recentActivity[] = $event;
+            }
+        }
+
+        $result = $conn->query("SELECT adminID, name, clubName, clubEmail, status, created_at FROM admins WHERE status = 'pending' ORDER BY created_at DESC LIMIT 10");
+        if ($result) {
+            $clubs = $result->fetch_all(MYSQLI_ASSOC);
+            foreach ($clubs as $club) {
+                $recentActivity[] = [
+                    'activity_type' => 'club',
+                    'eventID' => null,
+                    'adminID' => $club['adminID'],
+                    'eventTitle' => 'New club registration',
+                    'club_name' => $club['clubName'],
+                    'clubEmail' => $club['clubEmail'],
+                    'applicant_name' => $club['name'],
+                    'status' => $club['status'],
+                    'created_at' => $club['created_at']
+                ];
+            }
+        }
+
+        usort($recentActivity, function ($a, $b) {
+            return strtotime($b['created_at'] ?? '1970-01-01') <=> strtotime($a['created_at'] ?? '1970-01-01');
+        });
+        $recentActivity = array_slice($recentActivity, 0, 10);
     } catch (mysqli_sql_exception $e) {
         error_log('ModeratorDashboard DB error: ' . $e->getMessage());
     }
@@ -52,14 +81,14 @@
 
         <div class="mod-page-header">
             <div>
-                <h2 class="mod-title">Dashboard</h2>
+                <h2 class="mod-title">Moderator Dashboard</h2>
                 <p class="mod-sub">Overview of campus activity and pending items.</p>
             </div>
         </div>
 
         <div class="mod-stats-grid">
             <div class="mod-stat-card">
-                <a href="ModeratorEvents.php" class="stat-link">
+                <a href="ModeratorEvents.php?tab=upcoming" class="stat-link">
                     <div class="mod-stat-icon blue">
                         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
                     </div>
@@ -105,18 +134,53 @@
         </div>
 
         <div class="section-label">Recent Activity</div>
+
+        <div class="search-toolbar">
+            <div class="search-wrap">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="dashboardActivitySearch" class="search-bar" placeholder="Search events or clubs...">
+            </div>
+            <div class="reg-filter-group">
+                <button type="button" class="filter-chip active" data-activitystatus="all">All</button>
+                <button type="button" class="filter-chip" data-activitystatus="pending">Pending</button>
+                <button type="button" class="filter-chip" data-activitystatus="approved">Approved</button>
+                <button type="button" class="filter-chip" data-activitystatus="declined">Declined</button>
+            </div>
+        </div>
+
+        <p class="section-label" id="dashboardActivityCount">
+            <?php echo count($recentActivity); ?> activit<?php echo count($recentActivity) === 1 ? 'y' : 'ies'; ?> found
+        </p>
+
         <div class="mod-activity-list">
             <?php if (!empty($recentActivity)): ?>
                 <?php foreach ($recentActivity as $act): ?>
-                    <div class="mod-activity-item">
+                    <?php
+                        $activityStatus = strtolower($act['status'] ?? 'approved');
+                        $activityType = $act['activity_type'] ?? 'event';
+                        $activityTarget = $activityType === 'club'
+                            ? "ModeratorClubs.php?tab=pending"
+                            : "EventDetailsModerator.php?id=" . (int)$act['eventID'];
+                        $activitySearchTitle = strtolower(($act['eventTitle'] ?? '') . ' ' . ($act['applicant_name'] ?? '') . ' ' . ($act['clubEmail'] ?? ''));
+                    ?>
+                    <div class="mod-activity-item"
+                         onclick="window.location.href='<?php echo htmlspecialchars($activityTarget, ENT_QUOTES); ?>'"
+                         data-title="<?php echo htmlspecialchars($activitySearchTitle, ENT_QUOTES); ?>"
+                         data-club="<?php echo htmlspecialchars(strtolower($act['club_name'] ?? ''), ENT_QUOTES); ?>"
+                         data-status="<?php echo htmlspecialchars($activityStatus, ENT_QUOTES); ?>">
                         <span class="mod-activity-dot"></span>
                         <span>
                             <span class="act-title"><?php echo htmlspecialchars($act['eventTitle']); ?></span>
-                            <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo urlencode($act['adminID']); ?>" class="text-muted-link-inherit"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
+                            <?php if ($activityType === 'club'): ?>
+                                <span class="act-club">for <a href="ModeratorClubs.php?tab=pending" class="text-muted-link-inherit" onclick="event.stopPropagation();"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
+                            <?php else: ?>
+                                <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo urlencode($act['adminID']); ?>" class="text-muted-link-inherit" onclick="event.stopPropagation();"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
+                            <?php endif; ?>
                             <span class="act-status">-
                                 <?php
-                                    $s = $act['status'] ?? 'approved';
-                                    if ($s === 'pending') echo '<span style="color:var(--amber);font-weight:600;">Pending</span>';
+                                    $s = $activityStatus;
+                                    if ($s === 'pending' && $activityType === 'club') echo '<span style="color:var(--amber);font-weight:600;">Pending Club</span>';
+                                    elseif ($s === 'pending') echo '<span style="color:var(--amber);font-weight:600;">Pending</span>';
                                     elseif ($s === 'declined') echo '<span style="color:var(--red);font-weight:600;">Declined</span>';
                                     else echo '<span style="color:var(--green);font-weight:600;">Approved</span>';
                                 ?>
@@ -133,8 +197,48 @@
                     <p>No recent activity yet.</p>
                 </div>
             <?php endif; ?>
+            <div class="event-empty-box" id="dashboardActivityNoResults" style="display:none;">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <p>No matching activity</p>
+                <p class="empty-subtext">Try a different search or filter.</p>
+            </div>
         </div>
 
     </main>
+    <script>
+        const dashboardActivitySearch = document.getElementById('dashboardActivitySearch');
+        const dashboardActivityCount = document.getElementById('dashboardActivityCount');
+        const dashboardActivityNoResults = document.getElementById('dashboardActivityNoResults');
+        const dashboardActivityItems = document.querySelectorAll('.mod-activity-item');
+
+        function applyDashboardActivityFilters() {
+            const q = dashboardActivitySearch.value.toLowerCase().trim();
+            const activeStatus = document.querySelector('[data-activitystatus].active');
+            const status = activeStatus ? activeStatus.dataset.activitystatus : 'all';
+            let visible = 0;
+
+            dashboardActivityItems.forEach(item => {
+                let show = true;
+                if (q && !item.dataset.title.includes(q) && !item.dataset.club.includes(q)) show = false;
+                if (status !== 'all' && item.dataset.status !== status) show = false;
+                item.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+
+            dashboardActivityCount.textContent = visible + ' activit' + (visible === 1 ? 'y' : 'ies') + ' found';
+            dashboardActivityNoResults.style.display = visible === 0 && dashboardActivityItems.length > 0 ? '' : 'none';
+        }
+
+        dashboardActivitySearch.addEventListener('input', applyDashboardActivityFilters);
+        document.querySelectorAll('[data-activitystatus]').forEach(btn => {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('[data-activitystatus]').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                applyDashboardActivityFilters();
+            });
+        });
+    </script>
 </body>
 </html>

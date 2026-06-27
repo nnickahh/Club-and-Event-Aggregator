@@ -4,18 +4,18 @@
 
     if (isset($_SESSION['student_id'])) {
         $sid = $_SESSION['student_id'];
-        $upd = $conn->prepare("UPDATE student_notifications SET is_read = 1 WHERE studentID = ? AND is_read = 0");
+        $upd = $conn->prepare("DELETE FROM student_notifications WHERE studentID = ?");
         $upd->bind_param("s", $sid);
         $upd->execute();
         $upd->close();
     } elseif (isset($_SESSION['admin_id'])) {
         $aid = $_SESSION['admin_id'];
-        $upd = $conn->prepare("UPDATE notifications SET is_read = 1 WHERE adminID = ? AND is_read = 0");
+        $upd = $conn->prepare("DELETE FROM notifications WHERE adminID = ?");
         $upd->bind_param("s", $aid);
         $upd->execute();
         $upd->close();
     } elseif (isset($_SESSION['role']) && $_SESSION['role'] === 'moderator') {
-        $upd = $conn->prepare("UPDATE moderator_notifications SET is_read = 1 WHERE is_read = 0");
+        $upd = $conn->prepare("DELETE FROM moderator_notifications");
         $upd->execute();
         $upd->close();
     }

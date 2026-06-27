@@ -13,13 +13,13 @@
     // Fetch clubs for filter dropdown (only those with approved events)
     $clubsResult = $conn->query("SELECT DISTINCT a.clubName FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'approved' AND a.clubName IS NOT NULL ORDER BY a.clubName ASC");
 
-    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE ? BETWEEN e.eventDate AND COALESCE(e.eventEndDate, e.eventDate) AND e.status = 'approved' ORDER BY e.eventTime ASC");
+    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE ? BETWEEN e.eventDate AND COALESCE(e.eventEndDate, e.eventDate) AND e.status = 'approved' ORDER BY e.eventTime ASC");
     $ongoingStmt->bind_param("s", $currentDate);
     $ongoingStmt->execute();
     $ongoingResult = $ongoingStmt->get_result();
     $ongoingStmt->close();
 
-    $upcomingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE e.eventDate > ? AND e.status = 'approved' ORDER BY e.eventDate ASC");
+    $upcomingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE e.eventDate > ? AND e.status = 'approved' ORDER BY e.eventDate ASC");
     $upcomingStmt->bind_param("s", $currentDate);
     $upcomingStmt->execute();
     $upcomingResult = $upcomingStmt->get_result();
@@ -52,7 +52,7 @@
         $eventEndTime = !empty($row['eventEndTime']) ? strtotime($row['eventEndTime']) : null;
         ob_start();
         ?>
-        <article class="event-card"
+        <article class="event-card student-dashboard-event-card"
                  data-title="<?php echo strtolower(htmlspecialchars($row['eventTitle'])); ?>"
                  data-club="<?php echo strtolower(htmlspecialchars($row['clubName'])); ?>"
                  data-venue="<?php echo strtolower(htmlspecialchars($row['venue'])); ?>"

@@ -1,6 +1,7 @@
 <?php
     session_start();
     require_once 'db_connect.php';
+    require_once 'waitlist_helpers.php';
 
     if (!isset($_SESSION['admin_id']) || $_SESSION['role'] !== 'admin') {
         header("Location: AdminLogin.php");
@@ -9,6 +10,104 @@
 
     $adminID = $_SESSION['admin_id'];
     $eventID = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    $editMessage = '';
+
+    function prepareUploadDirectory($relativeDir) {
+        $relativeDir = trim($relativeDir, '/');
+        $absoluteDir = __DIR__ . '/' . $relativeDir;
+
+        if (!is_dir($absoluteDir) && !@mkdir($absoluteDir, 0775, true)) {
+            return false;
+        }
+
+        return is_writable($absoluteDir) ? $absoluteDir . '/' : false;
+    }
+
+    function collectEventPoster($currentImage) {
+        if (!isset($_FILES['eventImage']) || $_FILES['eventImage']['error'] === UPLOAD_ERR_NO_FILE) {
+            return [$currentImage, null];
+        }
+
+        if ($_FILES['eventImage']['error'] !== UPLOAD_ERR_OK) {
+            return [$currentImage, 'Failed to upload poster. Please try again.'];
+        }
+
+        $fileName = time() . '_' . basename($_FILES['eventImage']['name']);
+        $uploadDir = prepareUploadDirectory('uploads/events');
+        $relativePath = 'uploads/events/' . $fileName;
+        $targetPath = $uploadDir ? $uploadDir . $fileName : '';
+        $imageFileType = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
+        $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+        if (!in_array($imageFileType, $allowedTypes, true)) {
+            return [$currentImage, 'Only JPG, JPEG, PNG, GIF & WEBP files are allowed.'];
+        }
+        if ($_FILES['eventImage']['size'] > 5 * 1024 * 1024) {
+            return [$currentImage, 'Poster file size must be less than 5MB.'];
+        }
+        if (!$uploadDir) {
+            return [$currentImage, 'Upload folder is not writable. Please check the uploads/events folder permission.'];
+        }
+        if (!move_uploaded_file($_FILES['eventImage']['tmp_name'], $targetPath)) {
+            return [$currentImage, 'Failed to upload poster.'];
+        }
+
+        return [$relativePath, null];
+    }
+
+    function collectPaymentSettings($event) {
+        $paymentMethods = !empty($_POST['payment_methods']) ? implode(',', $_POST['payment_methods']) : null;
+        $tngPhone = null;
+        $tngQr = null;
+        $bankDetails = null;
+
+        if ($paymentMethods && strpos($paymentMethods, 'tng') !== false) {
+            $tngPhone = !empty(trim($_POST['tng_phone'] ?? '')) ? trim($_POST['tng_phone']) : null;
+            $tngQr = $event['tng_qr'] ?? null;
+            if ($tngPhone === null) {
+                return [null, null, null, null, 'TNG phone number is required.'];
+            }
+            if (!ctype_digit($tngPhone)) {
+                return [null, null, null, null, 'Only numbers allowed.'];
+            }
+
+            if (isset($_FILES['tng_qr']) && $_FILES['tng_qr']['error'] === UPLOAD_ERR_OK) {
+                $qrName = time() . '_qr_' . basename($_FILES['tng_qr']['name']);
+                $qrDir = prepareUploadDirectory('uploads/payments');
+                $relativeQrPath = 'uploads/payments/' . $qrName;
+                $qrPath = $qrDir ? $qrDir . $qrName : '';
+                $qrType = strtolower(pathinfo($relativeQrPath, PATHINFO_EXTENSION));
+
+                if ($qrDir && in_array($qrType, ['jpg','jpeg','png','gif','webp'], true) && move_uploaded_file($_FILES['tng_qr']['tmp_name'], $qrPath)) {
+                    $tngQr = $relativeQrPath;
+                }
+            }
+        }
+
+        if ($paymentMethods && strpos($paymentMethods, 'bank_in') !== false) {
+            $bankData = [];
+            if (empty(trim($_POST['bank_name'] ?? ''))) {
+                return [null, null, null, null, 'Bank name is required.'];
+            }
+            $bankData['bank_name'] = trim($_POST['bank_name']);
+            if (empty(trim($_POST['bank_account'] ?? ''))) {
+                return [null, null, null, null, 'Bank account number is required.'];
+            } else {
+                $bankAccount = trim($_POST['bank_account']);
+                if (!ctype_digit($bankAccount)) {
+                    return [null, null, null, null, 'Only numbers allowed.'];
+                }
+                $bankData['bank_account'] = $bankAccount;
+            }
+            if (empty(trim($_POST['bank_holder'] ?? ''))) {
+                return [null, null, null, null, 'Account holder name is required.'];
+            }
+            $bankData['bank_holder'] = trim($_POST['bank_holder']);
+            if (!empty($bankData)) $bankDetails = json_encode($bankData);
+        }
+
+        return [$paymentMethods, $tngPhone, $tngQr, $bankDetails, null];
+    }
 
     // Handle AJAX payment toggle (before rendering)
     if (isset($_POST['ajax_toggle_payment']) && $eventID) {
@@ -83,6 +182,9 @@
 
     // Handle cancel event
     if (isset($_POST['cancel_event'])) {
+        $cancelReason = trim($_POST['cancel_reason'] ?? '');
+        $reasonText = $cancelReason !== '' ? ' Reason: ' . $cancelReason : '';
+
         // Notify registered students
         $regStmt = $conn->prepare("SELECT studentID FROM registrations WHERE eventID = ?");
         $regStmt->bind_param("i", $eventID);
@@ -106,7 +208,7 @@
             $clubStmt->close();
 
             // Notify registered students
-            $regMsg = $eRow['eventTitle'] . ' has been cancelled. If you have made any payment, please contact the club for a refund.';
+            $regMsg = $eRow['eventTitle'] . ' has been cancelled.' . $reasonText . ' If you have made any payment, please contact the club for a refund.';
             $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID, clubID) VALUES (?, ?, ?, ?)");
             foreach ($regStudents as $s) {
                 $nStmt->bind_param("ssii", $s['studentID'], $regMsg, $eventID, $clubID);
@@ -120,7 +222,7 @@
             $subStudents = $subStmt->get_result()->fetch_all(MYSQLI_ASSOC);
             $subStmt->close();
 
-            $subMsg = $eRow['eventTitle'] . ' by ' . $clubName . ' has been cancelled.';
+            $subMsg = $eRow['eventTitle'] . ' by ' . $clubName . ' has been cancelled.' . $reasonText;
             foreach ($subStudents as $s) {
                 $nStmt->bind_param("ssii", $s['studentID'], $subMsg, $eventID, $clubID);
                 $nStmt->execute();
@@ -128,15 +230,22 @@
             $nStmt->close();
 
             // Notify admin
-            $adminMsg = $eRow['eventTitle'] . ' has been cancelled.';
+            $adminMsg = $eRow['eventTitle'] . ' has been cancelled.' . $reasonText;
             $aStmt = $conn->prepare("INSERT INTO notifications (adminID, message, eventID) VALUES (?, ?, ?)");
             $aStmt->bind_param("ssi", $adminID, $adminMsg, $eventID);
             $aStmt->execute();
             $aStmt->close();
+
+            // Notify moderators
+            $modMsg = $eRow['eventTitle'] . ' has been cancelled by the club admin.' . $reasonText;
+            $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message, eventID) VALUES (?, ?)");
+            $modStmt->bind_param("si", $modMsg, $eventID);
+            $modStmt->execute();
+            $modStmt->close();
         }
 
         $upd = $conn->prepare("UPDATE events SET status = 'cancelled' WHERE eventID = ? AND adminID = ?");
-        $upd->bind_param("ii", $eventID, $adminID);
+        $upd->bind_param("is", $eventID, $adminID);
         $upd->execute();
         $upd->close();
 
@@ -170,7 +279,7 @@
     // Handle end event
     if (isset($_POST['end_event'])) {
         $upd = $conn->prepare("UPDATE events SET status = 'ended' WHERE eventID = ? AND adminID = ?");
-        $upd->bind_param("ii", $eventID, $adminID);
+        $upd->bind_param("is", $eventID, $adminID);
         $upd->execute();
         $upd->close();
         header("Location: AdminDashboard.php");
@@ -188,10 +297,18 @@
         $newCapacity = intval($_POST['capacity'] ?? 0);
         $newDesc = trim($_POST['description'] ?? '');
         $newFee = !empty(trim($_POST['fee'] ?? '')) ? floatval($_POST['fee']) : 0.00;
+        [$paymentMethods, $tngPhone, $tngQr, $bankDetails, $paymentError] = collectPaymentSettings($event);
+        $newEventImage = $event['eventImage'] ?? null;
+        $posterError = null;
+        if (!$paymentError) {
+            [$newEventImage, $posterError] = collectEventPoster($event['eventImage'] ?? null);
+        }
 
-        if ($newTitle && $newDate && $newTime && $newVenue && $newCapacity) {
-            $upd = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=?, fee=? WHERE eventID=? AND adminID=?");
-            $upd->bind_param("ssssssisdsi", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newFee, $eventID, $adminID);
+        if ($paymentError || $posterError) {
+            $editMessage = $paymentError ?: $posterError;
+        } elseif ($newTitle && $newDate && $newTime && $newVenue && $newCapacity) {
+            $upd = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=?, eventImage=?, fee=?, payment_methods=?, tng_phone=?, tng_qr=?, bank_details=? WHERE eventID=? AND adminID=?");
+            $upd->bind_param("ssssssissdssssis", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newEventImage, $newFee, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $eventID, $adminID);
             $upd->execute();
             $upd->close();
             $conn->query("UPDATE events SET decline_reason=NULL WHERE eventID=$eventID");
@@ -204,7 +321,12 @@
             $event['venue'] = $newVenue;
             $event['capacity'] = $newCapacity;
             $event['description'] = $newDesc;
+            $event['eventImage'] = $newEventImage;
             $event['fee'] = $newFee;
+            $event['payment_methods'] = $paymentMethods;
+            $event['tng_phone'] = $tngPhone;
+            $event['tng_qr'] = $tngQr;
+            $event['bank_details'] = $bankDetails;
             $event['decline_reason'] = null;
             $fee = $newFee;
         }
@@ -221,10 +343,18 @@
         $newCapacity = intval($_POST['capacity'] ?? 0);
         $newDesc = trim($_POST['description'] ?? '');
         $newFee = !empty(trim($_POST['fee'] ?? '')) ? floatval($_POST['fee']) : 0.00;
+        [$paymentMethods, $tngPhone, $tngQr, $bankDetails, $paymentError] = collectPaymentSettings($event);
+        $newEventImage = $event['eventImage'] ?? null;
+        $posterError = null;
+        if (!$paymentError) {
+            [$newEventImage, $posterError] = collectEventPoster($event['eventImage'] ?? null);
+        }
 
-        if ($newTitle && $newDate && $newTime && $newVenue && $newCapacity) {
-            $upd = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=?, fee=?, status='pending' WHERE eventID=? AND adminID=?");
-            $upd->bind_param("ssssssisdsi", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newFee, $eventID, $adminID);
+        if ($paymentError || $posterError) {
+            $editMessage = $paymentError ?: $posterError;
+        } elseif ($newTitle && $newDate && $newTime && $newVenue && $newCapacity) {
+            $upd = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=?, eventImage=?, fee=?, payment_methods=?, tng_phone=?, tng_qr=?, bank_details=?, status='pending' WHERE eventID=? AND adminID=?");
+            $upd->bind_param("ssssssissdssssis", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newEventImage, $newFee, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $eventID, $adminID);
             $upd->execute();
             $upd->close();
             $conn->query("UPDATE events SET decline_reason=NULL WHERE eventID=$eventID");
@@ -247,7 +377,18 @@
             $del = $conn->prepare("DELETE FROM registrations WHERE eventID = ? AND studentID = ?");
             $del->bind_param("is", $eventID, $sid);
             $del->execute();
+            $removed = $del->affected_rows > 0;
             $del->close();
+
+            if ($removed) {
+                $removeMsg = 'You have been removed from ' . ($event['eventTitle'] ?? 'this event') . '. Please contact the club if you think this is a mistake.';
+                $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+                $nStmt->bind_param("ssi", $sid, $removeMsg, $eventID);
+                $nStmt->execute();
+                $nStmt->close();
+
+                promoteNextWaitlistedStudent($conn, (int)$eventID);
+            }
         }
         header("Location: EditEvent.php?id=" . $eventID);
         exit();
@@ -276,14 +417,44 @@
             $wRow = $wStmt->get_result()->fetch_assoc();
             $wStmt->close();
             if ($wRow) {
-                $ins = $conn->prepare("INSERT IGNORE INTO registrations (studentID, eventID, payment_method) VALUES (?, ?, ?)");
-                $ins->bind_param("sis", $wRow['studentID'], $eventID, $wRow['payment_method']);
+                $waitPaymentMethod = 'cash';
+                $waitPaymentStatus = 'unpaid';
+                $waitPaymentReceipt = null;
+                $ins = $conn->prepare("INSERT IGNORE INTO registrations (studentID, eventID, payment_method, payment_status, payment_receipt) VALUES (?, ?, ?, ?, ?)");
+                $ins->bind_param("sisss", $wRow['studentID'], $eventID, $waitPaymentMethod, $waitPaymentStatus, $waitPaymentReceipt);
                 $ins->execute();
+                $promoted = $ins->affected_rows > 0;
                 $ins->close();
                 $del = $conn->prepare("DELETE FROM waiting_list WHERE waitID = ?");
                 $del->bind_param("i", $wid);
                 $del->execute();
                 $del->close();
+
+                if ($promoted) {
+                    $countStmt = $conn->prepare("SELECT COUNT(*) AS registeredCount FROM registrations WHERE eventID = ?");
+                    $countStmt->bind_param("i", $eventID);
+                    $countStmt->execute();
+                    $registeredCount = (int)$countStmt->get_result()->fetch_assoc()['registeredCount'];
+                    $countStmt->close();
+
+                    if ($registeredCount > (int)$event['capacity']) {
+                        $capStmt = $conn->prepare("UPDATE events SET capacity = ? WHERE eventID = ? AND adminID = ?");
+                        $capStmt->bind_param("iis", $registeredCount, $eventID, $adminID);
+                        $capStmt->execute();
+                        $capStmt->close();
+                    }
+
+                    $memberStmt = $conn->prepare("INSERT IGNORE INTO club_members (studentID, adminID) VALUES (?, ?)");
+                    $memberStmt->bind_param("ss", $wRow['studentID'], $adminID);
+                    $memberStmt->execute();
+                    $memberStmt->close();
+
+                    $promoteMsg = "Good news! A space is available for {$event['eventTitle']}. You have successfully joined the event from the waiting list.";
+                    $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+                    $notifStmt->bind_param("ssi", $wRow['studentID'], $promoteMsg, $eventID);
+                    $notifStmt->execute();
+                    $notifStmt->close();
+                }
             }
         }
         header("Location: EditEvent.php?id=" . $eventID);
@@ -291,7 +462,7 @@
     }
 
     // Fetch participants with payment & attendance status
-    $partStmt = $conn->prepare("SELECT r.studentID, r.payment_status, r.attendance_status, r.payment_method, s.name, s.email FROM registrations r JOIN students s ON r.studentID = s.studentID WHERE r.eventID = ? ORDER BY s.name ASC");
+    $partStmt = $conn->prepare("SELECT r.studentID, r.payment_status, r.payment_receipt, r.attendance_status, r.payment_method, s.name, s.email FROM registrations r JOIN students s ON r.studentID = s.studentID WHERE r.eventID = ? ORDER BY s.name ASC");
     $partStmt->bind_param("i", $eventID);
     $partStmt->execute();
     $participants = $partStmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -305,6 +476,14 @@
     $waitStmt->close();
 
     $totalRegistered = count($participants);
+    if ($totalRegistered > (int)$event['capacity']) {
+        $syncCapacity = $totalRegistered;
+        $capStmt = $conn->prepare("UPDATE events SET capacity = ? WHERE eventID = ? AND adminID = ?");
+        $capStmt->bind_param("iis", $syncCapacity, $eventID, $adminID);
+        $capStmt->execute();
+        $capStmt->close();
+        $event['capacity'] = $syncCapacity;
+    }
     $totalPaid = count(array_filter($participants, fn($p) => $p['payment_status'] === 'paid'));
     $totalPresent = count(array_filter($participants, fn($p) => $p['attendance_status'] === 'present'));
     $fee = floatval($event['fee'] ?? 0);
@@ -319,36 +498,6 @@
     <meta charset="UTF-8">
     <title>Edit Event - <?php echo htmlspecialchars($event['eventTitle']); ?></title>
     <link rel="stylesheet" href="Style.css">
-    <style>
-        .edit-layout { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
-        .edit-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:24px; }
-        .edit-card h3 { margin:0 0 16px; font-size:16px; display:flex; align-items:center; justify-content:space-between; }
-        .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-        .stat-box { background:#f8f9fa; border-radius:8px; padding:14px; text-align:center; }
-        .stat-box .num { font-size:22px; font-weight:700; color:var(--ink); }
-        .stat-box .lbl { font-size:11px; color:var(--ink-3); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; }
-        .part-table { width:100%; border-collapse:collapse; font-size:13px; }
-        .part-table th { text-align:left; padding:10px 12px; background:#f8f9fa; border-bottom:2px solid var(--border); font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-3); white-space:nowrap; }
-        .part-table td { padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
-        .part-table tr:hover td { background:#fafafa; }
-        .toggle-btn { display:inline-flex; width:28px; height:28px; border-radius:50%; align-items:center; justify-content:center; cursor:pointer; font-size:16px; font-weight:700; transition:background 0.15s; border:none; }
-        .toggle-btn.off { background:#fef2f2; color:#dc2626; }
-        .toggle-btn.on { background:#dcfce7; color:#16a34a; }
-        .toggle-btn:hover { opacity:0.8; }
-        .search-part { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); font-size:13px; box-sizing:border-box; margin-bottom:16px; }
-        .meta-line { font-size:13px; color:var(--ink-2); margin:4px 0; }
-        .meta-line strong { color:var(--ink); }
-        .full-width { grid-column:1/-1; }
-        .back-link { display:inline-flex; align-items:center; gap:4px; font-size:13px; color:var(--red); text-decoration:none; font-weight:600; margin-bottom:16px; }
-        .add-btn { display:inline-flex; width:32px; height:32px; border-radius:50%; align-items:center; justify-content:center; background:var(--red); color:#fff; font-size:20px; font-weight:700; cursor:pointer; border:none; transition:transform 0.15s; }
-        .add-btn:hover { transform:scale(1.1); }
-        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); display:none; align-items:center; justify-content:center; z-index:1000; }
-        .modal-overlay.open { display:flex; }
-        .modal-box { background:#fff; border-radius:12px; padding:28px 32px; max-width:400px; width:90%; }
-        .modal-box h3 { margin:0 0 16px; font-size:16px; }
-        .modal-box input { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); font-size:14px; box-sizing:border-box; margin-bottom:12px; }
-        .modal-actions { display:flex; gap:10px; justify-content:flex-end; }
-    </style>
 </head>
 <body>
     <?php include 'AdminNavbar.php'; ?>
@@ -360,10 +509,15 @@
             <div class="flex-row-nowrap">
                 <button onclick="toggleEdit()" id="editBtn" class="action-pill-btn">Edit</button>
                 <?php if ($isPending): ?>
-                <a href="DeleteEvent.php?id=<?php echo $eventID; ?>" class="btn-red-inline" onclick="return confirm('Cancel this event?')">Cancel</a>
+                <form method="POST" action="DeleteEvent.php" class="flex-inline" onsubmit="return collectCancelReason(this);">
+                    <input type="hidden" name="event_id" value="<?php echo (int)$eventID; ?>">
+                    <input type="hidden" name="cancel_reason" value="">
+                    <button type="submit" class="btn-red-inline">Cancel</button>
+                </form>
                 <?php endif; ?>
                 <?php if ($isUpcoming): ?>
-                <form method="POST" onsubmit="return confirm('Cancel this event? Registered students and subscribers will be notified.');">
+                <form method="POST" onsubmit="return collectCancelReason(this);">
+                    <input type="hidden" name="cancel_reason" value="">
                     <button type="submit" name="cancel_event" class="btn-outline-danger">Cancel Event</button>
                 </form>
                 <?php endif; ?>
@@ -373,18 +527,25 @@
                 <form method="POST" onsubmit="return confirm('End this event and move it to completed?');">
                     <button type="submit" name="end_event" class="btn-outline-sm">End Event</button>
                 </form>
-                <form method="POST" onsubmit="return confirm('Cancel this event? Registered students and subscribers will be notified.');">
+                <form method="POST" onsubmit="return collectCancelReason(this);">
+                    <input type="hidden" name="cancel_reason" value="">
                     <button type="submit" name="cancel_event" class="btn-outline-danger">Cancel Event</button>
                 </form>
             </div>
             <?php endif; ?>
         </div>
+        <?php if ($editMessage): ?>
+            <p class="msg-error"><?php echo htmlspecialchars($editMessage); ?></p>
+        <?php endif; ?>
 
         <div class="edit-layout">
             <!-- Event Info -->
             <div class="edit-card">
                 <h3>Event Details</h3>
                 <div id="eventView">
+                    <?php if (!empty($event['eventImage'])): ?>
+                        <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event poster" class="edit-poster-preview clickable-poster" onclick="openEventPosterViewer(this.src)">
+                    <?php endif; ?>
                     <p class="meta-line"><strong>Date:</strong> <?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?></p>
                     <p class="meta-line"><strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></p>
                     <p class="meta-line"><strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?></p>
@@ -392,9 +553,9 @@
                     <p class="meta-line"><strong>Capacity:</strong> <?php echo (int)$event['capacity']; ?></p>
                     <p class="meta-line"><strong>Description:</strong> <?php echo nl2br(htmlspecialchars($event['description'])); ?></p>
                     <?php if (!empty($event['decline_reason'])): ?>
-                        <p class="meta-line" style="background:var(--red-light);padding:10px 12px;border-radius:8px;margin-top:8px;">
-                            <strong style="color:var(--red);">Declined reason:</strong>
-                            <span style="color:var(--red);"><?php echo nl2br(htmlspecialchars($event['decline_reason'])); ?></span>
+                        <p class="meta-line declined-note">
+                            <strong>Declined reason:</strong>
+                            <span><?php echo nl2br(htmlspecialchars($event['decline_reason'])); ?></span>
                         </p>
                     <?php endif; ?>
                     <?php if ($fee > 0 && !empty($event['payment_methods'])): ?>
@@ -408,8 +569,8 @@
                     <?php endif; ?>
                 </div>
                 <?php if ($canEdit): ?>
-                <div id="eventEdit" style="display:none;">
-                    <form method="POST" id="editForm">
+                <div id="eventEdit" class="hidden">
+                    <form method="POST" id="editForm" enctype="multipart/form-data">
                         <div class="mb-10">
                             <label class="form-label-sm">Event Title</label>
                             <input type="text" name="eventTitle" value="<?php echo htmlspecialchars($event['eventTitle']); ?>" required class="form-input">
@@ -447,6 +608,70 @@
                             <label class="form-label-sm">Description</label>
                             <textarea name="description" required class="form-textarea"><?php echo htmlspecialchars($event['description']); ?></textarea>
                         </div>
+                        <div class="mb-10">
+                            <label class="form-label-sm">Event Poster</label>
+                            <div class="edit-poster-upload">
+                                <?php if (!empty($event['eventImage'])): ?>
+                                    <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Current event poster" id="editPosterPreview">
+                                    <small class="text-xs-muted-alt">Current poster shown above. Choose a new image only if you want to replace it.</small>
+                                <?php else: ?>
+                                    <img src="" alt="Selected event poster preview" id="editPosterPreview" class="hidden">
+                                    <small class="text-xs-muted-alt">No poster uploaded yet. Choose an image to add one.</small>
+                                <?php endif; ?>
+                                <input type="file" name="eventImage" accept="image/jpeg,image/png,image/gif,image/webp" class="form-file-input-sm" onchange="previewEditPoster(this)">
+                                <small class="text-xs-muted-alt">Allowed: JPG, JPEG, PNG, GIF, WEBP. Maximum 5MB.</small>
+                            </div>
+                        </div>
+                        <?php
+                            $selectedMethods = array_filter(array_map('trim', explode(',', $event['payment_methods'] ?? '')));
+                            $bankData = !empty($event['bank_details']) ? json_decode($event['bank_details'], true) : [];
+                            if (!is_array($bankData)) $bankData = [];
+                        ?>
+                        <div class="mb-10">
+                            <label class="form-label-sm">Payment Methods</label>
+                            <div class="flex-payment-checkboxes">
+                                <label>
+                                    <input type="checkbox" name="payment_methods[]" value="cash" onchange="toggleEditPaymentFields()" class="form-checkbox" <?php echo in_array('cash', $selectedMethods, true) ? 'checked' : ''; ?>> Cash
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="payment_methods[]" value="tng" onchange="toggleEditPaymentFields()" class="form-checkbox" <?php echo in_array('tng', $selectedMethods, true) ? 'checked' : ''; ?>> TNG (Touch 'n Go)
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="payment_methods[]" value="bank_in" onchange="toggleEditPaymentFields()" class="form-checkbox" <?php echo in_array('bank_in', $selectedMethods, true) ? 'checked' : ''; ?>> Bank In
+                                </label>
+                            </div>
+
+                            <div id="editTngFields" class="payment-section">
+                                <p class="payment-section-title">TNG Payment Details</p>
+                                <div class="mb-10">
+                                    <label class="form-label-sm">Phone Number</label>
+                                    <input type="text" name="tng_phone" value="<?php echo htmlspecialchars($event['tng_phone'] ?? ''); ?>" placeholder="e.g., 0123456789" inputmode="numeric" pattern="[0-9]*" oninvalid="this.setCustomValidity(this.value ? 'Only numbers allowed' : 'Please fill out this field')" oninput="this.setCustomValidity(''); this.value=this.value.replace(/[^0-9]/g,'')" class="form-input">
+                                </div>
+                                <div>
+                                    <label class="form-label-sm">QR Code Image (optional)</label>
+                                    <?php if (!empty($event['tng_qr'])): ?>
+                                        <p class="text-xs-muted-alt">Current QR uploaded. Choose a new file only if you want to replace it.</p>
+                                    <?php endif; ?>
+                                    <input type="file" name="tng_qr" accept="image/*" class="form-file-input-sm">
+                                </div>
+                            </div>
+
+                            <div id="editBankFields" class="payment-section">
+                                <p class="payment-section-title">Bank In Details</p>
+                                <div class="mb-10">
+                                    <label class="form-label-sm">Bank Name</label>
+                                    <input type="text" name="bank_name" value="<?php echo htmlspecialchars($bankData['bank_name'] ?? ''); ?>" placeholder="e.g., CIMB Bank" oninvalid="this.setCustomValidity('Please fill out this field')" oninput="this.setCustomValidity('')" class="form-input">
+                                </div>
+                                <div class="mb-10">
+                                    <label class="form-label-sm">Account Number</label>
+                                    <input type="text" name="bank_account" value="<?php echo htmlspecialchars($bankData['bank_account'] ?? ''); ?>" placeholder="e.g., 1234567890" inputmode="numeric" pattern="[0-9]*" oninvalid="this.setCustomValidity(this.value ? 'Only numbers allowed' : 'Please fill out this field')" oninput="this.setCustomValidity(''); this.value=this.value.replace(/[^0-9]/g,'')" class="form-input">
+                                </div>
+                                <div>
+                                    <label class="form-label-sm">Account Holder Name</label>
+                                    <input type="text" name="bank_holder" value="<?php echo htmlspecialchars($bankData['bank_holder'] ?? ''); ?>" placeholder="e.g., John Doe" oninvalid="this.setCustomValidity('Please fill out this field')" oninput="this.setCustomValidity('')" class="form-input">
+                                </div>
+                            </div>
+                        </div>
                         <div class="flex-end">
                             <button type="button" onclick="toggleEdit()" class="btn-secondary">Cancel</button>
                             <?php if ($isUpcoming || !empty($event['decline_reason'])): ?>
@@ -475,11 +700,11 @@
                     </div>
                     <?php endif; ?>
                     <div class="stat-box">
-                        <div class="num"><?php echo $fee > 0 ? 'RM' . number_format($totalCollected, 2) . ' / RM' . number_format($potentialTotal, 2) : '—'; ?></div>
+                        <div class="num" id="feesCollectedStat" data-fee="<?php echo htmlspecialchars((string)$fee); ?>" data-potential="<?php echo htmlspecialchars((string)$potentialTotal); ?>"><?php echo $fee > 0 ? 'RM' . number_format($totalCollected, 2) . ' / RM' . number_format($potentialTotal, 2) : '—'; ?></div>
                         <div class="lbl">Fees Collected</div>
                     </div>
                     <div class="stat-box">
-                        <div class="num"><?php echo $fee > 0 ? $totalPaid . ' / ' . $totalRegistered : '—'; ?></div>
+                        <div class="num" id="paymentDoneStat"><?php echo $fee > 0 ? $totalPaid . ' / ' . $totalRegistered : '—'; ?></div>
                         <div class="lbl">Payment Done</div>
                     </div>
                 </div>
@@ -505,7 +730,7 @@
                                 <th>Payment Method</th>
                                 <th>Payment Status</th>
                                 <?php if ($isOngoing): ?><th>Attendance</th><?php endif; ?>
-                                <?php if (!$isOngoing): ?><th></th><?php endif; ?>
+                                <th>Remove</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -521,17 +746,25 @@
                                     } else {
                                         $pm = $p['payment_method'] ?? '';
                                         $methodLabels = ['cash'=>'Cash', 'tng'=>'TNG', 'bank_in'=>'Bank In'];
-                                        echo $pm ? ($methodLabels[$pm] ?? $pm) : '<span style="color:var(--ink-3)">—</span>';
+                                        echo $pm ? ($methodLabels[$pm] ?? $pm) : '<span class="text-xs-muted">—</span>';
                                     }
                                 ?></td>
                                 <td><?php if ($fee == 0): ?>—<?php else: ?>
-                                    <button class="toggle-btn <?php echo $p['payment_status'] === 'paid' ? 'on' : 'off'; ?>"
+                                    <?php
+                                        $paymentMethod = $p['payment_method'] ?? '';
+                                        $isPaid = ($p['payment_status'] ?? 'unpaid') === 'paid';
+                                        $receipt = $p['payment_receipt'] ?? '';
+                                    ?>
+                                    <button class="toggle-btn <?php echo $isPaid ? 'on' : 'off'; ?>"
                                             data-sid="<?php echo htmlspecialchars($p['studentID']); ?>"
                                             data-eid="<?php echo $eventID; ?>"
                                             data-type="payment"
                                             onclick="toggleField(this)">
-                                        <?php echo $p['payment_status'] === 'paid' ? '✓' : '✗'; ?>
+                                        <?php echo $isPaid ? '✅' : 'X'; ?>
                                     </button>
+                                    <?php if ($isPaid && $receipt): ?>
+                                        <a href="<?php echo htmlspecialchars($receipt); ?>" target="_blank" rel="noopener" class="receipt-link">(attachment)</a>
+                                    <?php endif; ?>
                                 <?php endif; ?></td>
                                 <?php if ($isOngoing): ?>
                                 <td>
@@ -540,30 +773,28 @@
                                             data-eid="<?php echo $eventID; ?>"
                                             data-type="attendance"
                                             onclick="toggleField(this)">
-                                        <?php echo $p['attendance_status'] === 'present' ? '✓' : '✗'; ?>
+                                        <?php echo $p['attendance_status'] === 'present' ? '✅' : 'X'; ?>
                                     </button>
                                 </td>
                                 <?php endif; ?>
-                                <?php if (!$isOngoing): ?>
                                 <td>
                                     <button class="remove-btn" title="Remove participant"
-                                            onclick="openRemoveReg('<?php echo htmlspecialchars($p['studentID']); ?>','<?php echo htmlspecialchars($p['name']); ?>')">✕</button>
+                                            onclick="openRemoveReg('<?php echo htmlspecialchars($p['studentID']); ?>','<?php echo htmlspecialchars($p['name']); ?>')">Remove</button>
                                 </td>
-                                <?php endif; ?>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
                 <?php if (empty($participants)): ?>
-                    <p class="text-center text-xs-muted" style="padding:24px 0;">No participants yet.</p>
+                    <p class="text-center text-xs-muted empty-table-note">No participants yet.</p>
                 <?php endif; ?>
 
                 <!-- Remove Registered Student Modal -->
                 <div class="modal-overlay" id="removeRegModal">
                     <div class="modal-box">
                         <h3>Remove Participant</h3>
-                        <p style="font-size:13px;color:var(--ink-2);margin-bottom:16px;">Are you sure you want to remove <strong id="removeRegName"></strong> from this event?</p>
+                        <p class="modal-helper-text">Are you sure you want to remove <strong id="removeRegName"></strong> from this event?</p>
                         <form method="POST">
                             <input type="hidden" name="student_id" id="removeRegSid">
                             <div class="modal-actions">
@@ -601,11 +832,11 @@
                                 <td><?php echo htmlspecialchars($w['email']); ?></td>
                                 <td><?php echo date('d M Y h:iA', strtotime($w['registered_at'])); ?></td>
                                 <td>
-                                    <form method="POST" style="display:inline;">
+                                    <form method="POST" class="inline-form">
                                         <input type="hidden" name="wait_id" value="<?php echo (int)$w['waitID']; ?>">
                                         <button type="submit" name="promote_waitlist" class="promote-btn" title="Move to registered"><?php echo $isOngoing ? 'Add' : 'Move'; ?></button>
                                     </form>
-                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Remove this student from the waiting list?');">
+                                    <form method="POST" class="inline-form" onsubmit="return confirm('Remove this student from the waiting list?');">
                                         <input type="hidden" name="wait_id" value="<?php echo (int)$w['waitID']; ?>">
                                         <button type="submit" name="remove_waitlist" class="remove-btn" title="Remove">Remove</button>
                                     </form>
@@ -616,11 +847,16 @@
                     </table>
                 </div>
                 <?php if (empty($waitlist)): ?>
-                    <p class="text-center text-xs-muted" style="padding:24px 0;">No one is on the waiting list.</p>
+                    <p class="text-center text-xs-muted empty-table-note">No one is on the waiting list.</p>
                 <?php endif; ?>
             </div>
         </div>
     </main>
+
+    <div id="eventPosterViewer" class="avatar-viewer-modal" onclick="closeEventPosterViewer()">
+        <span class="avatar-viewer-close">&times;</span>
+        <img class="avatar-viewer-image" id="eventPosterViewerImage" alt="Full event poster">
+    </div>
 
     <!-- Add Participant Modal -->
     <div class="modal-overlay" id="addModal">
@@ -657,15 +893,64 @@
     </div>
 
     <script>
+    function openEventPosterViewer(src) {
+        document.getElementById('eventPosterViewerImage').src = src;
+        document.getElementById('eventPosterViewer').classList.add('active');
+    }
+
+    function closeEventPosterViewer() {
+        document.getElementById('eventPosterViewer').classList.remove('active');
+    }
+
     function toggleEdit() {
         const view = document.getElementById('eventView');
         const edit = document.getElementById('eventEdit');
         const btn = document.getElementById('editBtn');
         if (!view || !edit) return;
-        const isEditing = edit.style.display !== 'none';
-        view.style.display = isEditing ? '' : 'none';
-        edit.style.display = isEditing ? 'none' : '';
+        const isEditing = !edit.classList.contains('hidden');
+        view.classList.toggle('hidden', !isEditing);
+        edit.classList.toggle('hidden', isEditing);
         btn.textContent = isEditing ? 'Edit' : 'Cancel';
+        toggleEditPaymentFields();
+    }
+
+    function previewEditPoster(input) {
+        const preview = document.getElementById('editPosterPreview');
+        const file = input.files && input.files[0] ? input.files[0] : null;
+        if (!preview || !file) return;
+        preview.src = URL.createObjectURL(file);
+        preview.classList.remove('hidden');
+        preview.style.display = 'block';
+    }
+
+    function toggleEditPaymentFields() {
+        const tng = document.querySelector('#editForm input[name="payment_methods[]"][value="tng"]');
+        const bank = document.querySelector('#editForm input[name="payment_methods[]"][value="bank_in"]');
+        const tngFields = document.getElementById('editTngFields');
+        const bankFields = document.getElementById('editBankFields');
+        const tngPhone = document.querySelector('#editForm input[name="tng_phone"]');
+        const bankName = document.querySelector('#editForm input[name="bank_name"]');
+        const bankAccount = document.querySelector('#editForm input[name="bank_account"]');
+        const bankHolder = document.querySelector('#editForm input[name="bank_holder"]');
+
+        if (tngFields) tngFields.style.display = tng && tng.checked ? 'block' : 'none';
+        if (bankFields) bankFields.style.display = bank && bank.checked ? 'block' : 'none';
+        if (tngPhone) {
+            tngPhone.required = !!(tng && tng.checked);
+            if (!tngPhone.required) tngPhone.setCustomValidity('');
+        }
+        if (bankName) {
+            bankName.required = !!(bank && bank.checked);
+            if (!bankName.required) bankName.setCustomValidity('');
+        }
+        if (bankAccount) {
+            bankAccount.required = !!(bank && bank.checked);
+            if (!bankAccount.required) bankAccount.setCustomValidity('');
+        }
+        if (bankHolder) {
+            bankHolder.required = !!(bank && bank.checked);
+            if (!bankHolder.required) bankHolder.setCustomValidity('');
+        }
     }
 
     document.getElementById('partSearch').addEventListener('input', function () {
@@ -694,8 +979,24 @@
             body: ajaxField + '=1&student_id=' + encodeURIComponent(sid) + '&new_status=' + newStatus
         }).then(() => {
             btn.className = 'toggle-btn ' + (newStatus === 'paid' || newStatus === 'present' ? 'on' : 'off');
-            btn.textContent = (newStatus === 'paid' || newStatus === 'present') ? '✓' : '✗';
+            btn.textContent = (newStatus === 'paid' || newStatus === 'present') ? '✅' : 'X';
+            if (type === 'payment') updatePaymentStats();
         });
+    }
+
+    function updatePaymentStats() {
+        const feesCollectedStat = document.getElementById('feesCollectedStat');
+        const paymentDoneStat = document.getElementById('paymentDoneStat');
+        if (!feesCollectedStat || !paymentDoneStat) return;
+
+        const paymentButtons = document.querySelectorAll('.toggle-btn[data-type="payment"]');
+        const paidCount = document.querySelectorAll('.toggle-btn[data-type="payment"].on').length;
+        const totalCount = paymentButtons.length;
+        const fee = parseFloat(feesCollectedStat.dataset.fee || '0');
+        const potential = parseFloat(feesCollectedStat.dataset.potential || '0');
+
+        paymentDoneStat.textContent = paidCount + ' / ' + totalCount;
+        feesCollectedStat.textContent = 'RM' + (paidCount * fee).toFixed(2) + ' / RM' + potential.toFixed(2);
     }
 
     function openRemoveReg(sid, name) {
@@ -704,12 +1005,32 @@
         document.getElementById('removeRegModal').classList.add('open');
     }
 
+    function collectCancelReason(form) {
+        const reason = prompt('Please write the reason for cancelling this event. Students will be notified with this reason.');
+        if (reason === null) return false;
+        if (!reason.trim()) {
+            alert('Cancellation reason is required.');
+            return false;
+        }
+        const field = form.querySelector('input[name="cancel_reason"]');
+        if (field) field.value = reason.trim();
+        return confirm('Cancel this event and notify students?');
+    }
+
     // Close modals on overlay click
     document.querySelectorAll('.modal-overlay').forEach(el => {
         el.addEventListener('click', function (e) {
             if (e.target === this) this.classList.remove('open');
         });
     });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeEventPosterViewer();
+        }
+    });
+
+    toggleEditPaymentFields();
     </script>
 </body>
 </html>

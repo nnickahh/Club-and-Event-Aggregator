@@ -8,7 +8,8 @@
     }
 
     $adminID = $_SESSION['admin_id'];
-    $eventID = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    $eventID = isset($_POST['event_id']) ? (int)$_POST['event_id'] : (isset($_GET['id']) ? (int)$_GET['id'] : 0);
+    $cancelReason = trim($_POST['cancel_reason'] ?? '');
 
     if (!$eventID) {
         header("Location: AdminDashboard.php");
@@ -27,6 +28,8 @@
         exit();
     }
 
+    $reasonText = $cancelReason !== '' ? ' Reason: ' . $cancelReason : '';
+
     // Notify registered students
     $regStmt = $conn->prepare("SELECT studentID FROM registrations WHERE eventID = ?");
     $regStmt->bind_param("i", $eventID);
@@ -35,7 +38,7 @@
     $regStmt->close();
 
     if (!empty($regStudents)) {
-        $msg = $event['eventTitle'] . ' has been cancelled. If you have made any payment, please contact the club.';
+        $msg = $event['eventTitle'] . ' has been cancelled.' . $reasonText . ' If you have made any payment, please contact the club.';
         $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
         foreach ($regStudents as $s) {
             $nStmt->bind_param("ssi", $s['studentID'], $msg, $eventID);
@@ -52,7 +55,7 @@
     $subStmt->close();
 
     if (!empty($subStudents)) {
-        $subMsg = $event['eventTitle'] . ' has been cancelled.';
+        $subMsg = $event['eventTitle'] . ' has been cancelled.' . $reasonText;
         $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
         foreach ($subStudents as $s) {
             $nStmt->bind_param("ssi", $s['studentID'], $subMsg, $eventID);
@@ -62,7 +65,7 @@
     }
 
     // Notify moderators
-    $modMsg = $event['eventTitle'] . ' has been cancelled by the club admin.';
+    $modMsg = $event['eventTitle'] . ' has been cancelled by the club admin.' . $reasonText;
     $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message, eventID) VALUES (?, ?)");
     $modStmt->bind_param("si", $modMsg, $eventID);
     $modStmt->execute();

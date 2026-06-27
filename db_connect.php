@@ -2,7 +2,7 @@
     // Throw exceptions on mysqli errors for clearer handling
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-    $servername = "localhost";
+    $servername = "127.0.0.1";
     $username = "root"; // Default XAMPP username
     $password = "";     // Default XAMPP password is blank
     $dbname = "campus_system";
@@ -155,6 +155,16 @@
         error_log('DB payment_method migration error: ' . $e->getMessage());
     }
 
+    // Add `payment_receipt` column to `registrations` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM registrations LIKE 'payment_receipt'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE registrations ADD COLUMN payment_receipt VARCHAR(255) DEFAULT NULL AFTER payment_method");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB payment_receipt migration error: ' . $e->getMessage());
+    }
+
     // Extend events.status ENUM to include 'ended' and 'cancelled'
     try {
         $check = $conn->query("SHOW COLUMNS FROM events LIKE 'status'");
@@ -186,6 +196,16 @@
         }
     } catch (mysqli_sql_exception $e) {
         error_log('DB decline_reason migration error: ' . $e->getMessage());
+    }
+
+    // Add `decline_reason` column to `admins` table (for declined club registration feedback)
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM admins LIKE 'decline_reason'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE admins ADD COLUMN decline_reason TEXT DEFAULT NULL AFTER status");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB admin decline_reason migration error: ' . $e->getMessage());
     }
 
     // Add `socialMedia` column to `clubs` table if it doesn't exist (for club social links)
@@ -303,6 +323,20 @@
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } catch (mysqli_sql_exception $e) {
         error_log('DB waiting_list table creation error: ' . $e->getMessage());
+    }
+
+    // Add payment tracking columns to `waiting_list` for paid waitlisted students
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM waiting_list LIKE 'payment_status'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE waiting_list ADD COLUMN payment_status ENUM('unpaid','paid') DEFAULT 'unpaid' AFTER payment_method");
+        }
+        $check = $conn->query("SHOW COLUMNS FROM waiting_list LIKE 'payment_receipt'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE waiting_list ADD COLUMN payment_receipt VARCHAR(255) DEFAULT NULL AFTER payment_status");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB payment columns migration for waiting_list error: ' . $e->getMessage());
     }
 
     // Create `moderator_notifications` table

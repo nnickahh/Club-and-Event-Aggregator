@@ -2,11 +2,24 @@
     session_start();
     require_once 'db_connect.php';
 
+    function prepareUploadDirectory($relativeDir) {
+        $relativeDir = trim($relativeDir, '/');
+        $absoluteDir = __DIR__ . '/' . $relativeDir;
+
+        if (!is_dir($absoluteDir) && !@mkdir($absoluteDir, 0775, true)) {
+            return false;
+        }
+
+        return is_writable($absoluteDir) ? $absoluteDir . '/' : false;
+    }
+
     if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['register']) && isset($_SESSION['student_id'])) {
 
         $studentID = $_SESSION['student_id'];
-        $eventID = $_POST['event_id'];
+        $eventID = (int)$_POST['event_id'];
         $paymentMethod = $_POST['payment_method'] ?? '';
+        $paymentStatus = 'unpaid';
+        $paymentReceipt = null;
 
         // 1. Check if the student is already registered
         $checkStmt = $conn->prepare("SELECT * FROM registrations WHERE studentID = ? AND eventID = ?");
@@ -29,19 +42,59 @@
         }
         $waitCheck->close();
 
-        // 2. Check capacity
-        $capStmt = $conn->prepare("SELECT e.capacity, (SELECT COUNT(*) FROM registrations WHERE eventID = ?) AS regCount FROM events e WHERE e.eventID = ?");
+        // 2. Check event details and capacity
+        $capStmt = $conn->prepare("SELECT e.capacity, e.fee, e.payment_methods, (SELECT COUNT(*) FROM registrations WHERE eventID = ?) AS regCount FROM events e WHERE e.eventID = ?");
         $capStmt->bind_param("ii", $eventID, $eventID);
         $capStmt->execute();
         $capResult = $capStmt->get_result()->fetch_assoc();
         $capStmt->close();
 
+        if (!$capResult) {
+            header("Location: StudentDashboard.php?status=error");
+            exit();
+        }
+
         $isFull = $capResult && $capResult['regCount'] >= $capResult['capacity'];
+
+        $fee = floatval($capResult['fee'] ?? 0);
+        $allowedMethods = array_filter(array_map('trim', explode(',', $capResult['payment_methods'] ?? '')));
+        if (!$isFull && $fee > 0 && !empty($allowedMethods) && !in_array($paymentMethod, $allowedMethods, true)) {
+            header("Location: DetailedEvent.php?id=" . $eventID . "&payment_error=1");
+            exit();
+        }
+
+        $receiptUploaded = isset($_FILES['payment_receipt']) && $_FILES['payment_receipt']['error'] !== UPLOAD_ERR_NO_FILE;
+        if (!$isFull && $fee > 0 && in_array($paymentMethod, ['tng', 'bank_in'], true) && $receiptUploaded && !isset($_POST['payment_paid'])) {
+            header("Location: DetailedEvent.php?id=" . $eventID . "&paid_required=1");
+            exit();
+        }
+
+        if (!$isFull && $fee > 0 && in_array($paymentMethod, ['tng', 'bank_in'], true) && isset($_POST['payment_paid'])) {
+            if (!isset($_FILES['payment_receipt']) || $_FILES['payment_receipt']['error'] !== UPLOAD_ERR_OK) {
+                header("Location: DetailedEvent.php?id=" . $eventID . "&receipt_required=1");
+                exit();
+            }
+
+            $receiptName = time() . '_receipt_' . basename($_FILES['payment_receipt']['name']);
+            $receiptDir = prepareUploadDirectory('uploads/receipts');
+            $relativeReceiptPath = 'uploads/receipts/' . $receiptName;
+            $receiptPath = $receiptDir ? $receiptDir . $receiptName : '';
+            $receiptType = strtolower(pathinfo($relativeReceiptPath, PATHINFO_EXTENSION));
+            $allowedReceiptTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+            if (!in_array($receiptType, $allowedReceiptTypes, true) || $_FILES['payment_receipt']['size'] > 5 * 1024 * 1024 || !$receiptDir || !move_uploaded_file($_FILES['payment_receipt']['tmp_name'], $receiptPath)) {
+                header("Location: DetailedEvent.php?id=" . $eventID . "&receipt_error=1");
+                exit();
+            }
+
+            $paymentStatus = 'paid';
+            $paymentReceipt = $relativeReceiptPath;
+        }
 
         if ($isFull) {
             // Insert into waiting list
-            $waitIns = $conn->prepare("INSERT IGNORE INTO waiting_list (studentID, eventID, payment_method) VALUES (?, ?, ?)");
-            $waitIns->bind_param("sis", $studentID, $eventID, $paymentMethod);
+            $waitIns = $conn->prepare("INSERT IGNORE INTO waiting_list (studentID, eventID, payment_method, payment_status, payment_receipt) VALUES (?, ?, ?, ?, ?)");
+            $waitIns->bind_param("sisss", $studentID, $eventID, $paymentMethod, $paymentStatus, $paymentReceipt);
             $waitIns->execute();
             $waitIns->close();
 
@@ -71,8 +124,8 @@
         }
 
         // 3. Insert new registration
-        $insertStmt = $conn->prepare("INSERT INTO registrations (studentID, eventID, payment_method) VALUES (?, ?, ?)");
-        $insertStmt->bind_param("sis", $studentID, $eventID, $paymentMethod);
+        $insertStmt = $conn->prepare("INSERT INTO registrations (studentID, eventID, payment_method, payment_status, payment_receipt) VALUES (?, ?, ?, ?, ?)");
+        $insertStmt->bind_param("sisss", $studentID, $eventID, $paymentMethod, $paymentStatus, $paymentReceipt);
 
         if ($insertStmt->execute()) {
             $evStmt = $conn->prepare("SELECT adminID, eventTitle FROM events WHERE eventID = ?");

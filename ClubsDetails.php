@@ -8,14 +8,30 @@
     }
     session_write_close();
 
+    function formatClubPosition($role) {
+        $role = preg_replace('/\s+/', ' ', str_replace('-', ' ', strtolower(trim($role ?? 'member'))));
+        return ucwords($role ?: 'member');
+    }
+
     if (!isset($_GET['id'])) {
         header("Location: Clubs.php");
         exit();
     }
     $clubID = (int)$_GET['id'];
 
-    // Fetch club details
-    $stmt = $conn->prepare("SELECT * FROM clubs WHERE clubID = ?");
+    // Fetch latest club details for this club/admin, even if an older clubID link is opened.
+    $stmt = $conn->prepare("
+        SELECT latestClub.*
+        FROM clubs requested
+        JOIN clubs latestClub ON latestClub.clubID = (
+            SELECT c2.clubID
+            FROM clubs c2
+            WHERE c2.adminID = requested.adminID
+            ORDER BY c2.clubID DESC
+            LIMIT 1
+        )
+        WHERE requested.clubID = ?
+    ");
     $stmt->bind_param("i", $clubID);
     $stmt->execute();
     $club = $stmt->get_result()->fetch_assoc();
@@ -56,8 +72,9 @@
         }
     }
 
-    // Fetch member count (only key positions visible to students)
-    $memCountStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM club_members WHERE adminID = ? AND LOWER(role) IN ('president', 'secretary', 'treasurer')");
+    // Fetch member count (only committee positions visible to students)
+    $committeeRoleSql = "'president', 'vice president', 'vice', 'secretary', 'vice secretary', 'treasurer', 'vice treasurer'";
+    $memCountStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM club_members WHERE adminID = ? AND LOWER(REPLACE(TRIM(role), '-', ' ')) IN ($committeeRoleSql)");
     $memCountStmt->bind_param("s", $adminID);
     $memCountStmt->execute();
     $memberCount = $memCountStmt->get_result()->fetch_assoc()['cnt'];
@@ -67,8 +84,8 @@
         SELECT cm.studentID, cm.role, cm.joined_at, s.name, s.email
         FROM club_members cm
         JOIN students s ON cm.studentID = s.studentID
-        WHERE cm.adminID = ? AND LOWER(cm.role) IN ('president', 'secretary', 'treasurer')
-        ORDER BY FIELD(LOWER(cm.role), 'president', 'secretary', 'treasurer'), cm.joined_at ASC
+        WHERE cm.adminID = ? AND LOWER(REPLACE(TRIM(cm.role), '-', ' ')) IN ($committeeRoleSql)
+        ORDER BY FIELD(LOWER(REPLACE(TRIM(cm.role), '-', ' ')), 'president', 'vice president', 'vice', 'secretary', 'vice secretary', 'treasurer', 'vice treasurer'), cm.joined_at ASC
     ");
     $membersStmt->bind_param("s", $adminID);
     $membersStmt->execute();
@@ -232,10 +249,10 @@
 
         <!-- Tabs -->
         <div class="tab-navigation-bar mt-24">
-            <button type="button" class="tab-trigger active" onclick="switchTab(event, 'overview-tab')">Overview</button>
-            <button type="button" class="tab-trigger" onclick="switchTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($ongoingEvents) + count($upcomingEvents); ?></span></button>
-            <button type="button" class="tab-trigger" onclick="switchTab(event, 'members-tab')">Committee <span class="tab-counter"><?php echo $memberCount; ?></span></button>
-            <button type="button" class="tab-trigger" onclick="switchTab(event, 'contacts-tab')">Contacts</button>
+            <button type="button" class="tab-trigger active" data-tab-target="overview-tab" onclick="switchTab(event, 'overview-tab')">Overview</button>
+            <button type="button" class="tab-trigger" data-tab-target="events-tab" onclick="switchTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($ongoingEvents) + count($upcomingEvents); ?></span></button>
+            <button type="button" class="tab-trigger" data-tab-target="members-tab" onclick="switchTab(event, 'members-tab')">Committee <span class="tab-counter"><?php echo $memberCount; ?></span></button>
+            <button type="button" class="tab-trigger" data-tab-target="contacts-tab" onclick="switchTab(event, 'contacts-tab')">Contacts</button>
         </div>
 
         <!-- Overview tab -->
@@ -331,7 +348,7 @@
                                 <th>Student ID</th>
                                 <th>Name</th>
                                 <th>Email</th>
-                                <th>Role</th>
+                                <th>Position</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -342,8 +359,9 @@
                                     <td><?php echo htmlspecialchars($m['name']); ?></td>
                                     <td><?php echo htmlspecialchars($m['email']); ?></td>
                                     <td>
-                                        <span class="badge-role-tag" style="background:<?php echo $m['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $m['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
-                                            <?php echo htmlspecialchars($m['role']); ?>
+                                        <?php $normalizedRole = strtolower(trim($m['role'] ?? 'member')); ?>
+                                        <span class="badge-role-tag" style="background:<?php echo $normalizedRole === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $normalizedRole === 'member' ? '#16a34a' : '#2563eb'; ?>;">
+                                            <?php echo htmlspecialchars(formatClubPosition($m['role'] ?? 'member')); ?>
                                         </span>
                                     </td>
                                 </tr>
@@ -355,7 +373,7 @@
                 <div class="empty-state-canvas">
                     <div class="empty-icon">👥</div>
                     <h4>No committee yet</h4>
-                    <p>The club president, secretary, and treasurer will appear here once assigned.</p>
+                    <p>The club committee will appear here once roles are assigned.</p>
                 </div>
             <?php endif; ?>
         </div>
@@ -392,11 +410,17 @@
     </div>
 
     <script>
-        function switchTab(event, tabId) {
+        function showClubTab(tabId) {
+            const panel = document.getElementById(tabId);
+            if (!panel) return;
             document.querySelectorAll('.tab-content-panel').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.tab-trigger').forEach(t => t.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            event.currentTarget.classList.add('active');
+            panel.classList.add('active');
+            const trigger = document.querySelector('[data-tab-target="' + tabId + '"]');
+            if (trigger) trigger.classList.add('active');
+        }
+        function switchTab(event, tabId) {
+            showClubTab(tabId);
         }
         function openClubViewer(src) {
             document.getElementById('clubViewerImage').src = src;
@@ -407,6 +431,13 @@
         }
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') closeClubViewer();
+        });
+        document.addEventListener('DOMContentLoaded', function () {
+            const tabFromHash = window.location.hash ? window.location.hash.substring(1) : '';
+            if (tabFromHash) {
+                showClubTab(tabFromHash);
+                document.getElementById(tabFromHash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         });
     </script>
 </body>

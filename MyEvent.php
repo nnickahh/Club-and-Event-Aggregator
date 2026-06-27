@@ -8,30 +8,101 @@
     }
     session_write_close();
 
+    function formatClubPosition($role) {
+        $role = preg_replace('/\s+/', ' ', str_replace('-', ' ', strtolower(trim($role ?? 'member'))));
+        return ucwords($role ?: 'member');
+    }
+
     $studentID = $_SESSION['student_id'];
+    $feedbackMessage = '';
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
+        $feedbackEventID = (int)($_POST['event_id'] ?? 0);
+        $rating = (int)($_POST['rating'] ?? 0);
+        $comment = trim($_POST['comment'] ?? '');
+        $today = date('Y-m-d');
+
+        if ($feedbackEventID <= 0 || $rating < 1 || $rating > 5) {
+            $feedbackMessage = 'Please select a rating from 1 to 5 stars.';
+        } else {
+            $pastCheck = $conn->prepare("
+                SELECT e.eventID
+                FROM events e
+                JOIN registrations r ON e.eventID = r.eventID
+                WHERE e.eventID = ?
+                  AND r.studentID = ?
+                  AND (COALESCE(e.eventEndDate, e.eventDate) < ? OR e.status = 'ended')
+                LIMIT 1
+            ");
+            $pastCheck->bind_param("iss", $feedbackEventID, $studentID, $today);
+            $pastCheck->execute();
+            $canFeedback = $pastCheck->get_result()->num_rows > 0;
+            $pastCheck->close();
+
+            if ($canFeedback) {
+                $existingStmt = $conn->prepare("SELECT feedbackID FROM event_feedback WHERE eventID = ? AND studentID = ? LIMIT 1");
+                $existingStmt->bind_param("is", $feedbackEventID, $studentID);
+                $existingStmt->execute();
+                $existing = $existingStmt->get_result()->fetch_assoc();
+                $existingStmt->close();
+
+                if ($existing) {
+                    $updateStmt = $conn->prepare("UPDATE event_feedback SET rating = ?, `comment` = ? WHERE feedbackID = ?");
+                    $updateStmt->bind_param("isi", $rating, $comment, $existing['feedbackID']);
+                    $updateStmt->execute();
+                    $updateStmt->close();
+                } else {
+                    $insertStmt = $conn->prepare("INSERT INTO event_feedback (eventID, studentID, rating, `comment`) VALUES (?, ?, ?, ?)");
+                    $insertStmt->bind_param("isis", $feedbackEventID, $studentID, $rating, $comment);
+                    $insertStmt->execute();
+                    $insertStmt->close();
+                }
+
+                header("Location: MyEvent.php?tab=history&feedback=1");
+                exit();
+            } else {
+                $feedbackMessage = 'Feedback can only be submitted for past events you joined.';
+            }
+        }
+    }
 
     // Registered events — separate active (ongoing/upcoming) from completed
     $today = date('Y-m-d');
-    $activeStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE r.studentID = ? AND COALESCE(e.eventEndDate, e.eventDate) >= ? ORDER BY e.eventDate ASC");
+    $activeStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE r.studentID = ? AND e.status = 'approved' AND COALESCE(e.eventEndDate, e.eventDate) >= ? ORDER BY e.eventDate ASC");
     $activeStmt->bind_param("ss", $studentID, $today);
     $activeStmt->execute();
     $activeEvents = $activeStmt->get_result();
     $activeStmt->close();
 
-    $completedStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.adminID = a.adminID WHERE r.studentID = ? AND COALESCE(e.eventEndDate, e.eventDate) < ? ORDER BY e.eventDate DESC");
-    $completedStmt->bind_param("ss", $studentID, $today);
-    $completedStmt->execute();
-    $completedEvents = $completedStmt->get_result();
-    $completedStmt->close();
+    $pastStmt = $conn->prepare("
+        SELECT e.*, a.clubName, c.clubID, f.feedbackID, f.rating, f.`comment` AS feedbackComment
+        FROM events e
+        JOIN registrations r ON e.eventID = r.eventID
+        LEFT JOIN admins a ON e.adminID = a.adminID
+        LEFT JOIN clubs c ON c.clubID = (
+            SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1
+        )
+        LEFT JOIN event_feedback f ON f.eventID = e.eventID AND f.studentID = r.studentID
+        WHERE r.studentID = ?
+          AND ((e.status = 'approved' AND COALESCE(e.eventEndDate, e.eventDate) < ?) OR e.status = 'ended')
+        ORDER BY e.eventDate DESC
+    ");
+    $pastStmt->bind_param("ss", $studentID, $today);
+    $pastStmt->execute();
+    $pastEvents = $pastStmt->get_result();
+    $pastStmt->close();
 
     // Club memberships
-    $clubsStmt = $conn->prepare("SELECT a.clubName, a.clubEmail, cm.role, cm.joined_at, c.clubID, c.profilePic FROM club_members cm JOIN admins a ON cm.adminID = a.adminID LEFT JOIN clubs c ON LOWER(TRIM(c.clubName)) = LOWER(TRIM(a.clubName)) WHERE cm.studentID = ? ORDER BY a.clubName ASC");
+    $clubsStmt = $conn->prepare("SELECT a.clubName, a.clubEmail, cm.role, cm.joined_at, c.clubID, c.profilePic FROM club_members cm JOIN admins a ON cm.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE cm.studentID = ? ORDER BY a.clubName ASC");
     $clubsStmt->bind_param("s", $studentID);
     $clubsStmt->execute();
     $clubsResult = $clubsStmt->get_result();
     $clubsStmt->close();
 
-    $activeTab = isset($_GET['tab']) && $_GET['tab'] === 'clubs' ? 'clubs' : 'events';
+    $validTabs = ['events', 'history', 'clubs'];
+    $requestedTab = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback']) ? 'history' : ($_GET['tab'] ?? 'events');
+    $activeTab = in_array($requestedTab, $validTabs, true) ? $requestedTab : 'events';
+    $showFeedbackSaved = isset($_GET['feedback']) && $_GET['feedback'] === '1';
 ?>
 
 <!DOCTYPE html>
@@ -40,49 +111,6 @@
     <meta charset="UTF-8">
     <title>My Activities</title>
     <link rel="stylesheet" href="Style.css">
-    <style>
-        .tab-bar { display:flex; gap:0; margin-bottom:28px; border-bottom:2px solid var(--border); }
-        .tab-bar a {
-            padding:12px 24px; font-size:14px; font-weight:600; color:var(--ink-3);
-            text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-2px;
-            transition:color 0.15s, border-color 0.15s;
-        }
-        .tab-bar a.active { color:var(--red); border-bottom-color:var(--red); }
-        .tab-bar a:hover { color:var(--ink); }
-        .horizontal-card {
-            display:flex; align-items:center; gap:16px;
-            padding:16px 20px; background:var(--surface);
-            border:1px solid var(--border); border-radius:var(--radius-md);
-            margin-bottom:12px;
-        }
-        .horizontal-card .card-body { flex:1; min-width:0; }
-        .horizontal-card .card-body .tag { font-size:11px; display:inline-block; margin-bottom:4px; }
-        .horizontal-card .card-body h4 { margin:0 0 2px; font-size:15px; }
-        .horizontal-card .card-body .card-meta { font-size:12px; color:var(--ink-3); }
-        .horizontal-card .card-actions { flex-shrink:0; }
-        .btn-sm {
-            padding:8px 16px; font-size:12px; font-weight:600;
-            border-radius:var(--radius-md); cursor:pointer; white-space:nowrap;
-            text-decoration:none; display:inline-block;
-        }
-        .btn-sm-outline {
-            background:transparent; border:1px solid var(--border-md);
-            color:var(--ink-2);
-        }
-        .btn-sm-outline:hover { border-color:var(--red); color:var(--red); }
-        .club-icon {
-            width:48px; height:48px; border-radius:50%;
-            display:flex; align-items:center; justify-content:center;
-            font-size:20px; flex-shrink:0;
-        }
-        .horizontal-card .tag { display:inline-block; }
-        .club-role-badge {
-            font-size:11px; font-weight:600; text-transform:uppercase;
-            padding:4px 10px; border-radius:20px;
-            background:var(--red-light); color:var(--red);
-            flex-shrink:0;
-        }
-    </style>
 </head>
 <body>
     <?php include 'StudentNavbar.php'; ?>
@@ -92,8 +120,15 @@
 
         <div class="tab-bar">
             <a href="MyEvent.php?tab=events" class="<?php echo $activeTab === 'events' ? 'active' : ''; ?>">My Events</a>
+            <a href="MyEvent.php?tab=history" class="<?php echo $activeTab === 'history' ? 'active' : ''; ?>">Past Events</a>
             <a href="MyEvent.php?tab=clubs" class="<?php echo $activeTab === 'clubs' ? 'active' : ''; ?>">My Clubs</a>
         </div>
+
+        <?php if ($showFeedbackSaved): ?>
+            <div class="msg-banner feedback-success-banner">Feedback saved successfully.</div>
+        <?php elseif ($feedbackMessage): ?>
+            <div class="msg-banner feedback-error-banner"><?php echo htmlspecialchars($feedbackMessage); ?></div>
+        <?php endif; ?>
 
         <?php if ($activeTab === 'events'): ?>
             <?php if ($activeEvents && $activeEvents->num_rows > 0): ?>
@@ -122,12 +157,14 @@
                 </div>
             <?php endif; ?>
 
-            <?php if ($completedEvents && $completedEvents->num_rows > 0): ?>
-                <h3 style="margin-top:36px;font-size:16px;color:var(--ink-3);border-top:1px solid var(--border);padding-top:24px;">Completed</h3>
-                <?php while ($row = $completedEvents->fetch_assoc()): ?>
-                    <div class="horizontal-card" style="opacity:0.7;">
+        <?php endif; ?>
+
+        <?php if ($activeTab === 'history'): ?>
+            <?php if ($pastEvents && $pastEvents->num_rows > 0): ?>
+                <?php while ($row = $pastEvents->fetch_assoc()): ?>
+                    <div class="horizontal-card past-event-card">
                         <div class="card-body">
-                            <span class="tag tag-confirmed">Completed</span>
+                            <span class="tag tag-confirmed">Past Event</span>
                             <?php if (!empty($row['clubName'])): ?>
                             <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="no-deco"><span class="tag"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
                             <?php endif; ?>
@@ -137,12 +174,40 @@
                                 <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?> |
                                 <?php echo htmlspecialchars($row['venue']); ?>
                             </div>
+                            <div class="feedback-panel">
+                                <?php if (!empty($row['feedbackID'])): ?>
+                                    <div class="feedback-current">
+                                        <span class="feedback-stars"><?php echo str_repeat('★', (int)$row['rating']) . str_repeat('☆', 5 - (int)$row['rating']); ?></span>
+                                        <?php if (!empty($row['feedbackComment'])): ?>
+                                            <p><?php echo nl2br(htmlspecialchars($row['feedbackComment'])); ?></p>
+                                        <?php else: ?>
+                                            <p>No comment added.</p>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                                <form method="POST" class="feedback-form">
+                                    <input type="hidden" name="event_id" value="<?php echo (int)$row['eventID']; ?>">
+                                    <div class="rating-row" aria-label="Star rating">
+                                        <?php for ($star = 5; $star >= 1; $star--): ?>
+                                            <input type="radio" id="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>" name="rating" value="<?php echo $star; ?>" <?php echo (int)($row['rating'] ?? 0) === $star ? 'checked' : ''; ?> required>
+                                            <label for="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>">★</label>
+                                        <?php endfor; ?>
+                                    </div>
+                                    <textarea name="comment" class="feedback-comment" rows="2" placeholder="Leave a quick comment..."><?php echo htmlspecialchars($row['feedbackComment'] ?? ''); ?></textarea>
+                                    <button type="submit" name="submit_feedback" class="btn-sm btn-sm-outline feedback-submit"><?php echo !empty($row['feedbackID']) ? 'Update Feedback' : 'Submit Feedback'; ?></button>
+                                </form>
+                            </div>
                         </div>
                         <div class="card-actions">
                             <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline">Details →</a>
                         </div>
                     </div>
                 <?php endwhile; ?>
+            <?php else: ?>
+                <div class="event-empty-box">
+                    <p>No past events yet.</p>
+                    <p class="empty-subtext">Events you joined will appear here after they have ended.</p>
+                </div>
             <?php endif; ?>
         <?php endif; ?>
 
@@ -152,15 +217,15 @@
                     $clubName = htmlspecialchars($club['clubName']); ?>
                     <div class="horizontal-card">
                         <?php if (!empty($club['profilePic'])): ?>
-                            <img src="<?php echo htmlspecialchars($club['profilePic']); ?>" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+                            <img src="<?php echo htmlspecialchars($club['profilePic']); ?>" class="club-avatar-sm" alt="<?php echo $clubName; ?>">
                         <?php else: ?>
-                            <div class="club-icon" style="background:var(--red-light);">🏛️</div>
+                            <div class="club-icon bg-red-light">🏛️</div>
                         <?php endif; ?>
                         <div class="card-body">
                             <h4><?php echo htmlspecialchars($club['clubName']); ?></h4>
                             <div class="card-meta"><?php echo htmlspecialchars($club['clubEmail'] ?? ''); ?> · Joined <?php echo date('d M Y', strtotime($club['joined_at'])); ?></div>
                         </div>
-                        <span class="club-role-badge"><?php echo htmlspecialchars(ucfirst($club['role'] ?? 'member')); ?></span>
+                        <span class="club-role-badge"><?php echo htmlspecialchars(formatClubPosition($club['role'] ?? 'member')); ?></span>
                         <div class="card-actions">
                             <a href="ClubsDetails.php?id=<?php echo (int)$club['clubID']; ?>" class="btn-sm btn-sm-outline">Details →</a>
                         </div>

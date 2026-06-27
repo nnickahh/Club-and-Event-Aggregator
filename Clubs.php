@@ -31,7 +31,17 @@
     }
 
     try {
-        $query = "SELECT * FROM clubs ORDER BY clubName ASC";
+        $query = "
+            SELECT c.*
+            FROM clubs c
+            INNER JOIN (
+                SELECT adminID, MAX(clubID) AS latestClubID
+                FROM clubs
+                WHERE adminID IS NOT NULL AND adminID <> ''
+                GROUP BY adminID
+            ) latest ON latest.latestClubID = c.clubID
+            ORDER BY c.clubName ASC
+        ";
         $result = $conn->query($query);
     } catch (mysqli_sql_exception $e) {
         error_log('Clubs.php DB query error: ' . $e->getMessage());

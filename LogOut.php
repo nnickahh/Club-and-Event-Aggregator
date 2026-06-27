@@ -3,6 +3,14 @@
 
     // Check if the confirmation form was submitted
     $isLoggedOut = false;
+    $lastRole = $_SESSION['role'] ?? 'student';
+    $loginPage = 'StudentLogin.php';
+    if ($lastRole === 'moderator') {
+        $loginPage = 'ModeratorLogin.php';
+    } elseif ($lastRole === 'admin') {
+        $loginPage = 'AdminLogin.php';
+    }
+
     if (isset($_POST['confirm_logout'])) {
         session_unset();
         session_destroy();
@@ -44,7 +52,7 @@
                     Thank you for using the campus portal!
                 </p>
             </div>
-            <a href="StudentLogin.php" class="btn-primary">Back to Login</a>
+            <a href="<?php echo $loginPage; ?>" class="btn-primary">Back to Login</a>
         </div>
     <?php endif; ?>
 

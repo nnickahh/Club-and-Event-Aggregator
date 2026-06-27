@@ -8,6 +8,11 @@
     }
     session_write_close();
 
+    function formatClubPosition($role) {
+        $role = preg_replace('/\s+/', ' ', str_replace('-', ' ', strtolower(trim($role ?? 'member'))));
+        return ucwords($role ?: 'member');
+    }
+
     $currentPage = 'clubs';
 
     if (!isset($_GET['id'])) {
@@ -37,24 +42,30 @@
             } elseif ($action === 'update') {
                 $clubNameUpd = trim($_POST['clubName'] ?? '');
                 $clubEmailUpd = trim($_POST['clubEmail'] ?? '');
-                $nameUpd = trim($_POST['name'] ?? '');
                 $descriptionUpd = trim($_POST['description'] ?? '');
                 $socialMediaUpd = trim($_POST['socialMedia'] ?? '');
 
-                $stmt = $conn->prepare("UPDATE admins SET clubName=?, clubEmail=?, name=? WHERE adminID=?");
-                $stmt->bind_param("ssss", $clubNameUpd, $clubEmailUpd, $nameUpd, $adminID);
+                $oldClubStmt = $conn->prepare("SELECT clubName FROM admins WHERE adminID = ?");
+                $oldClubStmt->bind_param("s", $adminID);
+                $oldClubStmt->execute();
+                $oldClubName = $oldClubStmt->get_result()->fetch_assoc()['clubName'] ?? $clubNameUpd;
+                $oldClubStmt->close();
+
+                $stmt = $conn->prepare("UPDATE admins SET clubName=?, clubEmail=? WHERE adminID=?");
+                $stmt->bind_param("sss", $clubNameUpd, $clubEmailUpd, $adminID);
                 $stmt->execute();
+                $stmt->close();
 
                 // Upsert clubs table
-                $checkClubs = $conn->prepare("SELECT clubID FROM clubs WHERE adminID = ?");
-                $checkClubs->bind_param("s", $adminID);
+                $checkClubs = $conn->prepare("SELECT clubID FROM clubs WHERE adminID = ? OR (adminID IS NULL AND (LOWER(TRIM(clubName)) = LOWER(TRIM(?)) OR LOWER(TRIM(clubName)) = LOWER(TRIM(?))))");
+                $checkClubs->bind_param("sss", $adminID, $oldClubName, $clubNameUpd);
                 $checkClubs->execute();
                 $hasClubRecord = $checkClubs->get_result()->num_rows > 0;
                 $checkClubs->close();
 
                 if ($hasClubRecord) {
-                    $updClubs = $conn->prepare("UPDATE clubs SET clubName=?, clubEmail=?, description=?, socialMedia=? WHERE adminID=?");
-                    $updClubs->bind_param("sssss", $clubNameUpd, $clubEmailUpd, $descriptionUpd, $socialMediaUpd, $adminID);
+                    $updClubs = $conn->prepare("UPDATE clubs SET clubName=?, clubEmail=?, description=?, socialMedia=?, adminID=? WHERE adminID=? OR (adminID IS NULL AND (LOWER(TRIM(clubName)) = LOWER(TRIM(?)) OR LOWER(TRIM(clubName)) = LOWER(TRIM(?))))");
+                    $updClubs->bind_param("ssssssss", $clubNameUpd, $clubEmailUpd, $descriptionUpd, $socialMediaUpd, $adminID, $adminID, $oldClubName, $clubNameUpd);
                     $updClubs->execute();
                     $updClubs->close();
                 } else {
@@ -63,6 +74,11 @@
                     $insClubs->execute();
                     $insClubs->close();
                 }
+
+                $eventClubStmt = $conn->prepare("UPDATE events SET clubName=? WHERE adminID=?");
+                $eventClubStmt->bind_param("ss", $clubNameUpd, $adminID);
+                $eventClubStmt->execute();
+                $eventClubStmt->close();
 
                 $message = 'Club details updated successfully.';
                 $msgType = 'success';
@@ -94,7 +110,18 @@
     $description = '';
     $socialMedia = '';
     try {
-        $stmt = $conn->prepare("SELECT a.*, c.profilePic AS clubPic, c.description, c.socialMedia FROM admins a LEFT JOIN clubs c ON a.adminID = c.adminID WHERE a.adminID = ?");
+        $stmt = $conn->prepare("
+            SELECT a.*, c.profilePic AS clubPic, c.description, c.socialMedia
+            FROM admins a
+            LEFT JOIN clubs c ON c.clubID = (
+                SELECT c2.clubID
+                FROM clubs c2
+                WHERE c2.adminID = a.adminID
+                ORDER BY c2.clubID DESC
+                LIMIT 1
+            )
+            WHERE a.adminID = ?
+        ");
         $stmt->bind_param("s", $adminID);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -173,7 +200,7 @@
     <?php include 'ModeratorNavBar.php'; ?>
 
     <main class="profile-hero-container">
-        <a href="ModeratorClubs.php" class="back-link">&larr; Back to Clubs</a>
+        <a href="ModeratorClubs.php?tab=approved" class="back-link">&larr; Back to Clubs</a>
 
         <?php if ($message): ?>
             <div class="msg-banner" style="background:<?php echo $msgType === 'success' ? 'var(--green-bg)' : 'var(--red-light)'; ?>;color:<?php echo $msgType === 'success' ? 'var(--green)' : 'var(--red)'; ?>;border:1px solid <?php echo $msgType === 'success' ? 'rgba(45,125,70,0.2)' : 'rgba(237,28,36,0.2)'; ?>;">
@@ -182,7 +209,6 @@
         <?php endif; ?>
 
         <form action="ClubDetailsModerator.php?id=<?php echo urlencode($adminIDVal); ?>" method="POST" id="mainProfileForm" enctype="multipart/form-data">
-            <input type="hidden" name="action" value="update">
 
         <div class="profile-brand-card">
             <div class="brand-identity-flex">
@@ -212,21 +238,15 @@
                 <div class="action-header-buttons">
                     <button type="button" class="btn-modern-secondary hide-on-edit" onclick="enableEditingMode()">✏️ Edit Club</button>
                     <button type="button" class="btn-modern-cancel show-on-edit" onclick="disableEditingMode()">Cancel</button>
-                    <button type="submit" class="btn-modern-primary show-on-edit">💾 Save Changes</button>
-                    <form method="POST" onsubmit="return confirm('Are you sure you want to decline this club registration?');" class="flex-inline">
-                        <input type="hidden" name="action" value="decline">
-                        <button type="submit" class="btn-decline-outline">Decline Club</button>
-                    </form>
+                    <button type="submit" name="action" value="update" class="btn-modern-primary show-on-edit">💾 Save Changes</button>
+                    <button type="submit" name="action" value="decline" class="btn-decline-outline" formnovalidate onclick="return confirm('Are you sure you want to decline this club registration?');">Decline Club</button>
                 </div>
             <?php else: ?>
                 <div class="action-header-buttons">
                     <button type="button" class="btn-modern-secondary hide-on-edit" onclick="enableEditingMode()">✏️ Edit Club</button>
                     <button type="button" class="btn-modern-cancel show-on-edit" onclick="disableEditingMode()">Cancel</button>
-                    <button type="submit" class="btn-modern-primary show-on-edit">💾 Save Changes</button>
-                    <form method="POST" onsubmit="return confirm('Delete this entire club and all its data? This cannot be undone.');" class="flex-inline">
-                        <input type="hidden" name="action" value="delete">
-                        <button type="submit" class="btn-decline-outline">🗑️ Delete Club</button>
-                    </form>
+                    <button type="submit" name="action" value="update" class="btn-modern-primary show-on-edit">💾 Save Changes</button>
+                    <button type="submit" name="action" value="delete" class="btn-decline-outline" formnovalidate onclick="return confirm('Delete this entire club and all its data? This cannot be undone.');">🗑️ Delete Club</button>
                 </div>
             <?php endif; ?>
         </div>
@@ -258,14 +278,6 @@
                     <div class="form-group-modern">
                         <label>Official Contact Email</label>
                         <input type="email" name="clubEmail" id="clubEmailInput" class="editable-field text-input" required value="<?php echo $clubEmail; ?>" readonly>
-                    </div>
-                    <div class="form-group-modern">
-                        <label>Admin Name</label>
-                        <input type="text" name="name" id="adminNameInput" class="editable-field text-input" value="<?php echo $adminName; ?>" readonly>
-                    </div>
-                    <div class="form-group-modern">
-                        <label>Admin ID</label>
-                        <input type="text" value="<?php echo $adminIDVal; ?>" readonly class="input-readonly-bg">
                     </div>
                     <div class="form-group-modern">
                         <label>Social Media & Other Contacts</label>
@@ -356,7 +368,7 @@
                                 <th>Student ID</th>
                                 <th>Full Name</th>
                                 <th>Official Email Address</th>
-                                <th>Role</th>
+                                <th>Position</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -367,8 +379,9 @@
                                     <td class="user-cell-name"><strong><?php echo htmlspecialchars($memb['name']); ?></strong></td>
                                     <td><a href="mailto:<?php echo htmlspecialchars($memb['email']); ?>" class="email-link"><?php echo htmlspecialchars($memb['email']); ?></a></td>
                                     <td>
-                                        <span class="badge-role-tag" style="background:<?php echo $memb['role'] === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $memb['role'] === 'member' ? '#16a34a' : '#2563eb'; ?>;">
-                                            <?php echo htmlspecialchars($memb['role']); ?>
+                                        <?php $normalizedRole = strtolower(trim($memb['role'] ?? 'member')); ?>
+                                        <span class="badge-role-tag" style="background:<?php echo $normalizedRole === 'member' ? '#f0fdf4' : '#eff6ff'; ?>;color:<?php echo $normalizedRole === 'member' ? '#16a34a' : '#2563eb'; ?>;">
+                                            <?php echo htmlspecialchars(formatClubPosition($memb['role'] ?? 'member')); ?>
                                         </span>
                                     </td>
                                 </tr>
@@ -404,7 +417,6 @@
             document.getElementById('clubNameInput').removeAttribute('readonly');
             document.getElementById('descriptionInput').removeAttribute('readonly');
             document.getElementById('clubEmailInput').removeAttribute('readonly');
-            document.getElementById('adminNameInput').removeAttribute('readonly');
             document.getElementById('socialMediaInput').removeAttribute('readonly');
         }
 
@@ -413,7 +425,6 @@
             document.getElementById('clubNameInput').setAttribute('readonly', 'true');
             document.getElementById('descriptionInput').setAttribute('readonly', 'true');
             document.getElementById('clubEmailInput').setAttribute('readonly', 'true');
-            document.getElementById('adminNameInput').setAttribute('readonly', 'true');
             document.getElementById('socialMediaInput').setAttribute('readonly', 'true');
         }
 

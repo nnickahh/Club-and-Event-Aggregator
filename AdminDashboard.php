@@ -65,18 +65,46 @@
 
     <?php include 'AdminNavbar.php'; ?>
 
-    <main class="container">
+    <main class="container admin-dashboard-shell">
+        <h2 class="clubs-title admin-dashboard-title">Admin Dashboard</h2>
         
-        <header class="dashboard-header">
-            <div>
-                <h1>Welcome Back, <?php echo htmlspecialchars(isset($_SESSION['full_name']) ? $_SESSION['full_name'] : 'Admin User'); ?></h1>
-                <p class="subtitle">Managing: <strong><?php echo htmlspecialchars($clubName); ?></strong></p>
+        <header class="dashboard-header admin-management-hero">
+            <div class="admin-hero-copy">
+                <span class="admin-kicker">Club Management</span>
+                <h1>Welcome Back, <?php echo htmlspecialchars($clubName); ?></h1>
+                <p class="subtitle">Managed by: <strong><?php echo htmlspecialchars(isset($_SESSION['full_name']) ? $_SESSION['full_name'] : 'Admin User'); ?></strong></p>
             </div>
-            <a href="CreateEvent.php" class="btn-primary no-deco">Create New Event</a>
+            <div class="admin-hero-actions">
+                <a href="ClubSettings.php" class="btn-outline no-deco">Club Settings</a>
+                <a href="CreateEvent.php" class="btn-primary no-deco">Create New Event</a>
+            </div>
         </header>
 
+        <section class="admin-status-strip" aria-label="Event status overview">
+            <a href="#ongoing-events" class="admin-status-card status-ongoing">
+                <span>Ongoing</span>
+                <strong><?php echo count($ongoingEvents); ?></strong>
+            </a>
+            <a href="#upcoming-events" class="admin-status-card status-upcoming">
+                <span>Upcoming</span>
+                <strong><?php echo count($upcomingEvents); ?></strong>
+            </a>
+            <a href="#pending-events" class="admin-status-card status-pending">
+                <span>Pending</span>
+                <strong><?php echo count($pendingEvents); ?></strong>
+            </a>
+            <a href="#completed-events" class="admin-status-card status-completed">
+                <span>Completed</span>
+                <strong><?php echo count($completedEvents); ?></strong>
+            </a>
+            <a href="#cancelled-events" class="admin-status-card status-cancelled">
+                <span>Cancelled</span>
+                <strong><?php echo count($cancelledEvents); ?></strong>
+            </a>
+        </section>
+
         <!-- ONGOING EVENTS SECTION -->
-        <h3 class="section-title">Ongoing Events</h3>
+        <h3 class="section-title" id="ongoing-events">Ongoing Events</h3>
         <section class="event-grid">
             <?php if (!empty($ongoingEvents)): ?>
                 <?php foreach($ongoingEvents as $event): ?>
@@ -98,9 +126,9 @@
                             <p class="event-desc"><?php echo htmlspecialchars($event['description']); ?></p>
                         </div>
 
-                        <div class="action-buttons">
+                        <div class="action-buttons equal-action-buttons">
                             <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
-                            <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
+                            <button type="button" class="btn-danger" onclick="openAdminCancelModal(<?php echo (int)$event['eventID']; ?>, <?php echo htmlspecialchars(json_encode($event['eventTitle']), ENT_QUOTES); ?>)">Delete</button>
                         </div>
                     </article>
                 <?php endforeach; ?>
@@ -113,7 +141,7 @@
         </section>
 
         <!-- UPCOMING EVENTS SECTION -->
-        <h3 class="section-title">Upcoming Events</h3>
+        <h3 class="section-title" id="upcoming-events">Upcoming Events</h3>
         <section class="event-grid">
             <?php if (!empty($upcomingEvents)): ?>
                 <?php foreach($upcomingEvents as $event): ?>
@@ -135,9 +163,9 @@
                             <p class="event-desc"><?php echo htmlspecialchars($event['description']); ?></p>
                         </div>
 
-                        <div class="action-buttons">
+                        <div class="action-buttons equal-action-buttons">
                             <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
-                            <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
+                            <button type="button" class="btn-danger" onclick="openAdminCancelModal(<?php echo (int)$event['eventID']; ?>, <?php echo htmlspecialchars(json_encode($event['eventTitle']), ENT_QUOTES); ?>)">Delete</button>
                         </div>
                     </article>
                 <?php endforeach; ?>
@@ -150,7 +178,7 @@
         </section>
 
         <!-- PENDING EVENTS SECTION -->
-        <h3 class="section-title">Pending Events</h3>
+        <h3 class="section-title" id="pending-events">Pending Events</h3>
         <p class="text-sm-muted" style="margin:-10px 0 16px 0;">Events with a pending status are not visible to students until approved by a moderator.</p>
         <section class="event-grid">
             <?php if (!empty($pendingEvents)): ?>
@@ -172,9 +200,9 @@
                             <p class="event-desc"><?php echo htmlspecialchars($event['description']); ?></p>
                         </div>
 
-                        <div class="action-buttons">
+                        <div class="action-buttons equal-action-buttons">
                             <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
-                            <a href="DeleteEvent.php?id=<?php echo $event['eventID']; ?>" class="btn-danger" onclick="return confirm('Are you sure you want to delete this event?');">Delete</a>
+                            <button type="button" class="btn-danger" onclick="openAdminCancelModal(<?php echo (int)$event['eventID']; ?>, <?php echo htmlspecialchars(json_encode($event['eventTitle']), ENT_QUOTES); ?>)">Delete</button>
                         </div>
                     </article>
                 <?php endforeach; ?>
@@ -187,11 +215,11 @@
         </section>
 
         <!-- COMPLETED EVENTS SECTION -->
-        <h3 class="section-title">Completed Events</h3>
+        <h3 class="section-title" id="completed-events">Completed Events</h3>
         <section class="event-grid">
             <?php if (!empty($completedEvents)): ?>
                 <?php foreach($completedEvents as $event): ?>
-                    <article class="event-card event-card-completed"> 
+                    <article class="event-card event-card-completed event-card-cancelled"> 
                         <div>
                             <span class="tag">Completed</span>
                             <?php if (!empty($event['eventImage'])): ?>
@@ -205,7 +233,7 @@
                             </div>
                         </div>
 
-                        <div class="action-buttons">
+                        <div class="action-buttons completed-report-actions">
                             <a href="ExportReport.php?id=<?php echo $event['eventID']; ?>" class="btn-outline btn-full-width">Generate Report</a>
                         </div>
                     </article>
@@ -219,7 +247,7 @@
         </section>
 
         <!-- CANCELLED EVENTS SECTION -->
-        <h3 class="section-title">Cancelled Events</h3>
+        <h3 class="section-title" id="cancelled-events">Cancelled Events</h3>
         <section class="event-grid">
             <?php if (!empty($cancelledEvents)): ?>
                 <?php foreach($cancelledEvents as $event): ?>
@@ -237,8 +265,12 @@
                             </div>
                         </div>
 
-                        <div class="action-buttons">
+                        <div class="action-buttons equal-action-buttons">
                             <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
+                            <form method="POST" action="DeleteCancelledEvent.php" onsubmit="return confirm('Permanently delete this cancelled event record? This cannot be undone.');">
+                                <input type="hidden" name="event_id" value="<?php echo (int)$event['eventID']; ?>">
+                                <button type="submit" class="btn-danger">Delete Record</button>
+                            </form>
                         </div>
                     </article>
                 <?php endforeach; ?>
@@ -251,6 +283,23 @@
         </section>
 
     </main>
+
+    <div id="adminCancelModal" class="modal-overlay" onclick="closeAdminCancelModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <button type="button" class="modal-close" onclick="closeAdminCancelModal()">&times;</button>
+            <h3>Cancel Event</h3>
+            <p class="text-sm-muted mb-16">Write the reason for cancelling <strong id="adminCancelEventTitle">this event</strong>. Students will be notified with this reason.</p>
+            <form method="POST" action="DeleteEvent.php">
+                <input type="hidden" name="event_id" id="adminCancelEventID" value="">
+                <label for="adminCancelReason" class="form-label-md">Reason</label>
+                <textarea name="cancel_reason" id="adminCancelReason" class="form-textarea-lg" rows="4" required placeholder="e.g. Venue unavailable, weather issue, insufficient participants..."></textarea>
+                <div class="modal-actions">
+                    <button type="button" class="btn-mod-details" onclick="closeAdminCancelModal()">Cancel</button>
+                    <button type="submit" class="btn-danger">Confirm Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <?php if ($flashMessage): ?>
     <div id="flashOverlay" class="flash-overlay">
@@ -265,6 +314,22 @@
         </div>
     </div>
     <?php endif; ?>
+
+    <script>
+        function openAdminCancelModal(eventID, eventTitle) {
+            document.getElementById('adminCancelEventID').value = eventID;
+            document.getElementById('adminCancelEventTitle').textContent = eventTitle || 'this event';
+            document.getElementById('adminCancelReason').value = '';
+            document.getElementById('adminCancelModal').classList.add('active');
+            document.getElementById('adminCancelReason').focus();
+        }
+
+        function closeAdminCancelModal(e) {
+            if (!e || e.target === document.getElementById('adminCancelModal')) {
+                document.getElementById('adminCancelModal').classList.remove('active');
+            }
+        }
+    </script>
 
 </body>
 </html>

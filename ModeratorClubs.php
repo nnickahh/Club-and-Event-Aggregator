@@ -48,12 +48,19 @@
                     $msgType = 'success';
                 }
             } elseif ($action === 'decline') {
-                $stmt = $conn->prepare("UPDATE admins SET status = 'declined' WHERE adminID = ? AND status = 'pending'");
-                $stmt->bind_param("s", $adminID);
-                $stmt->execute();
-                if ($stmt->affected_rows > 0) {
-                    $msg = 'Club registration declined.';
-                    $msgType = 'success';
+                $declineReason = trim($_POST['decline_reason'] ?? '');
+
+                if ($declineReason === '') {
+                    $msg = 'Please write a reason before declining this club registration.';
+                    $msgType = 'error';
+                } else {
+                    $stmt = $conn->prepare("UPDATE admins SET status = 'declined', decline_reason = ? WHERE adminID = ? AND status = 'pending'");
+                    $stmt->bind_param("ss", $declineReason, $adminID);
+                    $stmt->execute();
+                    if ($stmt->affected_rows > 0) {
+                        $msg = 'Club registration declined.';
+                        $msgType = 'success';
+                    }
                 }
             }
         } catch (mysqli_sql_exception $e) {
@@ -121,10 +128,26 @@
             </a>
         </div>
 
+        <div class="search-toolbar">
+            <div class="search-wrap">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="modClubSearch" class="search-bar" placeholder="Search clubs by name, admin, email, or ID...">
+            </div>
+        </div>
+
+        <p class="section-label" id="modClubResultCount">
+            <?php echo count($clubs); ?> club<?php echo count($clubs) !== 1 ? 's' : ''; ?> found
+        </p>
+
         <section class="event-grid">
             <?php if (!empty($clubs)): ?>
                 <?php foreach ($clubs as $club): ?>
-                    <article class="event-card mod-card">
+                    <article class="event-card mod-card"
+                             data-name="<?php echo htmlspecialchars(strtolower($club['clubName'] ?? ''), ENT_QUOTES); ?>"
+                             data-admin="<?php echo htmlspecialchars(strtolower($club['name'] ?? ''), ENT_QUOTES); ?>"
+                             data-email="<?php echo htmlspecialchars(strtolower($club['clubEmail'] ?? ''), ENT_QUOTES); ?>"
+                             data-adminid="<?php echo htmlspecialchars(strtolower($club['adminID'] ?? ''), ENT_QUOTES); ?>"
+                             data-status="<?php echo $tab === 'pending' ? 'pending' : 'approved'; ?>">
                         <div class="card-stripe" data-color="<?php echo $tab === 'pending' ? 'amber' : 'green'; ?>"></div>
                         <div class="card-body">
 
@@ -163,12 +186,8 @@
                                         <input type="hidden" name="club_action" value="approve">
                                         <button type="submit" class="btn-mod-accept" onclick="return confirm('Approve this club registration?')">Accept</button>
                                     </form>
-                                    <form method="POST" class="flex-inline">
-                                        <input type="hidden" name="adminID" value="<?php echo htmlspecialchars($club['adminID']); ?>">
-                                        <input type="hidden" name="club_action" value="decline">
-                                        <button type="submit" class="btn-mod-decline" onclick="return confirm('Decline this club registration?')">Decline</button>
-                                    </form>
-                                    <button type="button" class="btn-mod-details" onclick="openRegModal('<?php echo htmlspecialchars($club['adminID'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($club['clubName'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($club['name'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($club['clubEmail'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($club['created_at'] ?? '', ENT_QUOTES); ?>')">View</button>
+                                    <button type="button" class="btn-mod-decline" onclick="openClubDeclineModal(<?php echo htmlspecialchars(json_encode($club['adminID']), ENT_QUOTES); ?>, <?php echo htmlspecialchars(json_encode($club['clubName']), ENT_QUOTES); ?>)">Decline</button>
+                                    <button type="button" class="btn-mod-details" onclick="openRegModal(<?php echo htmlspecialchars(json_encode($club['adminID']), ENT_QUOTES); ?>, <?php echo htmlspecialchars(json_encode($club['clubName']), ENT_QUOTES); ?>, <?php echo htmlspecialchars(json_encode($club['name']), ENT_QUOTES); ?>, <?php echo htmlspecialchars(json_encode($club['clubEmail']), ENT_QUOTES); ?>, <?php echo htmlspecialchars(json_encode($club['created_at'] ?? ''), ENT_QUOTES); ?>)">View</button>
                                 <?php else: ?>
                                     <a href="ClubDetailsModerator.php?id=<?php echo urlencode($club['adminID']); ?>" class="btn-mod-details">Details</a>
                                 <?php endif; ?>
@@ -185,6 +204,13 @@
                     <p class="empty-subtext">There are no clubs in this category right now.</p>
                 </div>
             <?php endif; ?>
+            <div class="event-empty-box" id="modClubNoResults" style="display:none;">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <p>No matching clubs</p>
+                <p class="empty-subtext">Try a different search or filter.</p>
+            </div>
         </section>
 
     </main>
@@ -209,25 +235,44 @@
                     <input type="hidden" name="club_action" value="approve">
                     <button type="submit" class="btn-mod-accept" onclick="return confirm('Approve this club registration?')">Accept</button>
                 </form>
-                <form method="POST" class="flex-inline">
-                    <input type="hidden" name="adminID" id="modalDeclineID" value="">
-                    <input type="hidden" name="club_action" value="decline">
-                    <button type="submit" class="btn-mod-decline" onclick="return confirm('Decline this club registration?')">Decline</button>
-                </form>
+                <button type="button" class="btn-mod-decline" onclick="openClubDeclineModalFromDetails()">Decline</button>
                 <button type="button" class="btn-mod-details" onclick="closeRegModal()">Cancel</button>
             </div>
         </div>
     </div>
 
+    <!-- Decline Reason Modal -->
+    <div id="clubDeclineModal" class="modal-overlay" onclick="closeClubDeclineModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <button type="button" class="modal-close" onclick="closeClubDeclineModal()">&times;</button>
+            <h3>Decline Club Registration</h3>
+            <p class="text-sm-muted mb-16">Write the reason for declining <strong id="declineClubNameText">this club</strong>.</p>
+            <form method="POST" id="clubDeclineForm">
+                <input type="hidden" name="adminID" id="declineAdminID" value="">
+                <input type="hidden" name="club_action" value="decline">
+                <label for="clubDeclineReason" class="form-label-md">Reason</label>
+                <textarea name="decline_reason" id="clubDeclineReason" class="form-textarea-lg" rows="4" required placeholder="e.g. Club information is incomplete, duplicate club registration, invalid club email..."></textarea>
+                <div class="modal-actions">
+                    <button type="button" class="btn-mod-details" onclick="closeClubDeclineModal()">Cancel</button>
+                    <button type="submit" class="btn-mod-decline">Submit Decline</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        let currentRegAdminID = '';
+        let currentRegClubName = '';
+
         function openRegModal(adminID, clubName, adminName, clubEmail, created) {
+            currentRegAdminID = adminID;
+            currentRegClubName = clubName;
             document.getElementById('regClubName').textContent = clubName;
             document.getElementById('regAdminName').textContent = adminName;
             document.getElementById('regAdminID').textContent = adminID;
             document.getElementById('regClubEmail').textContent = clubEmail;
             document.getElementById('regDate').textContent = created ? new Date(created).toLocaleString('en-MY', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
             document.getElementById('modalApproveID').value = adminID;
-            document.getElementById('modalDeclineID').value = adminID;
             document.getElementById('regModal').classList.add('active');
         }
         function closeRegModal(e) {
@@ -235,9 +280,54 @@
                 document.getElementById('regModal').classList.remove('active');
             }
         }
+
+        function openClubDeclineModal(adminID, clubName) {
+            document.getElementById('declineAdminID').value = adminID;
+            document.getElementById('declineClubNameText').textContent = clubName || 'this club';
+            document.getElementById('clubDeclineReason').value = '';
+            document.getElementById('clubDeclineModal').classList.add('active');
+            document.getElementById('clubDeclineReason').focus();
+        }
+
+        function openClubDeclineModalFromDetails() {
+            closeRegModal();
+            openClubDeclineModal(currentRegAdminID, currentRegClubName);
+        }
+
+        function closeClubDeclineModal(e) {
+            if (!e || e.target === document.getElementById('clubDeclineModal')) {
+                document.getElementById('clubDeclineModal').classList.remove('active');
+            }
+        }
+
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') document.getElementById('regModal').classList.remove('active');
+            if (e.key === 'Escape') {
+                document.getElementById('regModal').classList.remove('active');
+                document.getElementById('clubDeclineModal').classList.remove('active');
+            }
         });
+
+        const modClubSearch = document.getElementById('modClubSearch');
+        const modClubCount = document.getElementById('modClubResultCount');
+        const modClubNoResults = document.getElementById('modClubNoResults');
+        const modClubCards = document.querySelectorAll('.mod-card');
+
+        function applyModeratorClubFilters() {
+            const q = modClubSearch.value.toLowerCase().trim();
+            let visible = 0;
+
+            modClubCards.forEach(card => {
+                let show = true;
+                if (q && !card.dataset.name.includes(q) && !card.dataset.admin.includes(q) && !card.dataset.email.includes(q) && !card.dataset.adminid.includes(q)) show = false;
+                card.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+
+            modClubCount.textContent = visible + ' club' + (visible !== 1 ? 's' : '') + ' found';
+            modClubNoResults.style.display = visible === 0 && modClubCards.length > 0 ? '' : 'none';
+        }
+
+        modClubSearch.addEventListener('input', applyModeratorClubFilters);
     </script>
 </body>
 </html>

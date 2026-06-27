@@ -118,6 +118,10 @@ CREATE TABLE `registrations` (
   `registrationID` int(11) NOT NULL,
   `studentID` varchar(50) NOT NULL,
   `eventID` int(11) NOT NULL,
+  `payment_status` enum('unpaid','paid') DEFAULT 'unpaid',
+  `payment_method` varchar(50) DEFAULT NULL,
+  `payment_receipt` varchar(255) DEFAULT NULL,
+  `attendance_status` enum('absent','present') DEFAULT 'absent',
   `registrationDate` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

@@ -4,12 +4,18 @@
     if (isset($_SESSION['student_id'])) {
         require_once 'db_connect.php';
         $studentID = $_SESSION['student_id'];
-        $nStmt = $conn->prepare("SELECT id, message, eventID, clubID, created_at FROM student_notifications WHERE studentID = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5");
+        $countStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM student_notifications WHERE studentID = ? AND is_read = 0");
+        $countStmt->bind_param("s", $studentID);
+        $countStmt->execute();
+        $countResult = $countStmt->get_result();
+        $notifCount = $countResult ? (int)$countResult->fetch_assoc()['cnt'] : 0;
+        $countStmt->close();
+
+        $nStmt = $conn->prepare("SELECT id, message, eventID, clubID, is_read, created_at FROM student_notifications WHERE studentID = ? ORDER BY created_at DESC LIMIT 10");
         $nStmt->bind_param("s", $studentID);
         $nStmt->execute();
         $nResult = $nStmt->get_result();
         $notifications = $nResult->fetch_all(MYSQLI_ASSOC);
-        $notifCount = count($notifications);
         $nStmt->close();
     }
 ?>
@@ -44,18 +50,27 @@
             <div class="dropdown-content notif-dropdown">
                 <?php if (!empty($notifications)): ?>
                     <?php foreach ($notifications as $n): ?>
-                        <a href="<?php
-                            if (!empty($n['eventID'])) { echo 'DetailedEvent.php?id=' . (int)$n['eventID']; }
-                            elseif (!empty($n['clubID'])) { echo 'ClubsDetails.php?id=' . (int)$n['clubID']; }
-                            else { echo 'Clubs.php'; }
-                        ?>" class="notif-link">
-                            <?php echo htmlspecialchars($n['message']); ?>
+                        <?php
+                            $notifTarget = '';
+                            if (!empty($n['eventID'])) { $notifTarget = 'DetailedEvent.php?id=' . (int)$n['eventID']; }
+                            elseif (!empty($n['clubID'])) {
+                                $notifTarget = 'ClubsDetails.php?id=' . (int)$n['clubID'];
+                                if (stripos($n['message'], 'You have been assigned as') !== false) {
+                                    $notifTarget .= '#members-tab';
+                                }
+                            }
+                            else { $notifTarget = 'Clubs.php'; }
+                            $notifHref = 'mark_notification_read.php?type=student&id=' . (int)$n['id'] . '&redirect=' . urlencode($notifTarget);
+                        ?>
+                        <a href="<?php echo htmlspecialchars($notifHref); ?>" class="notif-link <?php echo empty($n['is_read']) ? 'notif-link-unread' : ''; ?>">
+                            <?php if (empty($n['is_read'])): ?><span class="notif-dot notif-dot-blue"></span><?php endif; ?>
+                            <span class="notif-message-text"><?php echo htmlspecialchars($n['message']); ?></span>
                             <br><small class="notif-time"><?php echo date('d M h:i A', strtotime($n['created_at'])); ?></small>
                         </a>
                     <?php endforeach; ?>
-                    <a href="clear_notifications.php" class="clear-notif">Clear All</a>
+                    <a href="clear_notifications.php" class="clear-notif" onclick="return confirm('Remove all notifications from the list?');">Clear All</a>
                 <?php else: ?>
-                    <a class="notif-empty">No new notifications</a>
+                    <a class="notif-empty">No notifications</a>
                 <?php endif; ?>
                 <hr class="notif-sep">
                 <a href="ProfileSettings.php">Profile</a>

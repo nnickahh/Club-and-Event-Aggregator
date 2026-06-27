@@ -24,7 +24,7 @@
 
         try {
             if ($action === 'approve') {
-                $stmt = $conn->prepare("UPDATE events SET status = 'approved' WHERE eventID = ?");
+                $stmt = $conn->prepare("UPDATE events SET status = 'approved', decline_reason = NULL WHERE eventID = ?");
                 $stmt->bind_param("i", $eventID);
                 $stmt->execute();
                 // Notify subscribed students
@@ -53,6 +53,12 @@
                     }
                     $notifStmt->close();
                     $subStmt->close();
+
+                    $adminMsg = $eRow['eventTitle'] . ' has been approved/re-approved by the moderator.';
+                    $adminStmt = $conn->prepare("INSERT INTO notifications (adminID, message, eventID) VALUES (?, ?, ?)");
+                    $adminStmt->bind_param("ssi", $eRow['adminID'], $adminMsg, $eventID);
+                    $adminStmt->execute();
+                    $adminStmt->close();
                 }
                 $message = 'Event has been approved successfully.';
                 $msgType = 'success';
@@ -95,14 +101,16 @@
                 $msgType = 'success';
                 $isEditing = false;
             } elseif ($action === 'delete') {
-                // Notify registered students
-                $regStmt = $conn->prepare("SELECT studentID FROM registrations WHERE eventID = ?");
-                $regStmt->bind_param("i", $eventID);
+                $deleteReason = trim($_POST['delete_reason'] ?? '');
+
+                // Notify registered and waitlisted students
+                $regStmt = $conn->prepare("SELECT studentID FROM registrations WHERE eventID = ? UNION SELECT studentID FROM waiting_list WHERE eventID = ?");
+                $regStmt->bind_param("ii", $eventID, $eventID);
                 $regStmt->execute();
                 $regStudents = $regStmt->get_result()->fetch_all(MYSQLI_ASSOC);
                 $regStmt->close();
 
-                $eStmt = $conn->prepare("SELECT eventTitle FROM events WHERE eventID = ?");
+                $eStmt = $conn->prepare("SELECT eventTitle, adminID FROM events WHERE eventID = ?");
                 $eStmt->bind_param("i", $eventID);
                 $eStmt->execute();
                 $eRow = $eStmt->get_result()->fetch_assoc();
@@ -110,19 +118,27 @@
 
                 if ($eRow) {
                     $title = $eRow['eventTitle'];
+                    $reasonText = $deleteReason !== '' ? ' Reason: ' . $deleteReason : '';
                     if (!empty($regStudents)) {
-                        $msg = $title . ' has been deleted by a moderator. If you have made any payment, please contact the club.';
-                        $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+                        $msg = $title . ' has been deleted/cancelled by a moderator.' . $reasonText . ' If you have made any payment, please contact the club.';
+                        $nStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message) VALUES (?, ?)");
                         foreach ($regStudents as $s) {
-                            $nStmt->bind_param("ssi", $s['studentID'], $msg, $eventID);
+                            $nStmt->bind_param("ss", $s['studentID'], $msg);
                             $nStmt->execute();
                         }
                         $nStmt->close();
                     }
+                    // Notify admin
+                    $adminMsg = $title . ' has been deleted/cancelled by a moderator.' . $reasonText;
+                    $adminStmt = $conn->prepare("INSERT INTO notifications (adminID, message) VALUES (?, ?)");
+                    $adminStmt->bind_param("ss", $eRow['adminID'], $adminMsg);
+                    $adminStmt->execute();
+                    $adminStmt->close();
+
                     // Notify moderators
-                    $modMsg = $title . ' has been deleted.';
-                    $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message, eventID) VALUES (?, ?)");
-                    $modStmt->bind_param("si", $modMsg, $eventID);
+                    $modMsg = $title . ' has been deleted/cancelled.' . $reasonText;
+                    $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message) VALUES (?)");
+                    $modStmt->bind_param("s", $modMsg);
                     $modStmt->execute();
                     $modStmt->close();
                 }
@@ -207,7 +223,7 @@
 
         <article class="event-detail-card">
             <?php if (!empty($event['eventImage'])): ?>
-                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" class="img-event-detail">
+                <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event poster" class="img-event-detail clickable-poster" onclick="openEventPosterViewer(this.src)">
             <?php endif; ?>
             <a href="ClubDetailsModerator.php?id=<?php echo urlencode($event['adminID']); ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
 
@@ -381,15 +397,17 @@
                         <button type="button" class="btn-decline" onclick="openDeclineModal()">Decline Event</button>
                     <?php elseif ($eventStatus === 'approved'): ?>
                         <a href="EventDetailsModerator.php?id=<?php echo $eventID; ?>&edit=1" class="btn-edit">Edit Event</a>
-                        <form method="POST" onsubmit="return confirm('Are you sure you want to delete this event? This cannot be undone.');">
-                            <input type="hidden" name="action" value="delete">
-                            <button type="submit" class="btn-delete">Delete Event</button>
-                        </form>
+                        <button type="button" class="btn-delete" onclick="openDeleteModal()">Delete Event</button>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
         </article>
     </main>
+
+    <div id="eventPosterViewer" class="avatar-viewer-modal" onclick="closeEventPosterViewer()">
+        <span class="avatar-viewer-close">&times;</span>
+        <img class="avatar-viewer-image" id="eventPosterViewerImage" alt="Full event poster">
+    </div>
 
     <!-- Decline Reason Modal -->
     <div id="declineModal" class="modal-overlay" onclick="if(event.target===this)closeDeclineModal()">
@@ -408,15 +426,49 @@
         </div>
     </div>
 
+    <!-- Delete Reason Modal -->
+    <div id="deleteModal" class="modal-overlay" onclick="if(event.target===this)closeDeleteModal()">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <button type="button" class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            <h3>Delete Event</h3>
+            <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px;">Write the reason for deleting/cancelling this event. The club admin and affected students will be notified.</p>
+            <form method="POST" id="deleteForm">
+                <input type="hidden" name="action" value="delete">
+                <textarea name="delete_reason" class="form-textarea" placeholder="e.g. Event violates guidelines, duplicate event, unsuitable details..." rows="4" required style="resize:vertical;width:100%;box-sizing:border-box;margin-bottom:16px;"></textarea>
+                <div class="modal-actions" style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                    <button type="submit" class="btn-delete" onclick="return confirm('Delete this event permanently? This cannot be undone.')">Delete Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        function openEventPosterViewer(src) {
+            document.getElementById('eventPosterViewerImage').src = src;
+            document.getElementById('eventPosterViewer').classList.add('active');
+        }
+        function closeEventPosterViewer() {
+            document.getElementById('eventPosterViewer').classList.remove('active');
+        }
         function openDeclineModal() {
             document.getElementById('declineModal').classList.add('active');
         }
         function closeDeclineModal() {
             document.getElementById('declineModal').classList.remove('active');
         }
+        function openDeleteModal() {
+            document.getElementById('deleteModal').classList.add('active');
+        }
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('active');
+        }
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') document.getElementById('declineModal').classList.remove('active');
+            if (e.key === 'Escape') {
+                closeEventPosterViewer();
+                document.getElementById('declineModal').classList.remove('active');
+                document.getElementById('deleteModal').classList.remove('active');
+            }
         });
     </script>
 
