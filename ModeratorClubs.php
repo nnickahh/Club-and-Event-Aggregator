@@ -14,6 +14,8 @@
     $counts = ['pending' => 0, 'approved' => 0];
     $msg = '';
     $msgType = '';
+    $moderatorID = $_SESSION['moderator_id'] ?? null;
+    $moderatorName = $_SESSION['full_name'] ?? 'Moderator';
 
     // Handle inline Accept / Decline
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['club_action'], $_POST['adminID'])) {
@@ -32,8 +34,8 @@
                     $info->execute();
                     $row = $info->get_result()->fetch_assoc();
                     $info->close();
-                    if ($row) {
-                        $chk = $conn->prepare("SELECT clubID FROM clubs WHERE adminID = ?");
+	                    if ($row) {
+	                        $chk = $conn->prepare("SELECT clubID FROM clubs WHERE adminID = ?");
                         $chk->bind_param("s", $adminID);
                         $chk->execute();
                         if ($chk->get_result()->num_rows === 0) {
@@ -42,9 +44,10 @@
                             $ins->execute();
                             $ins->close();
                         }
-                        $chk->close();
-                    }
-                    $msg = 'Club approved successfully.';
+	                        $chk->close();
+	                        logModeratorActivity($conn, $moderatorID, $moderatorName, 'approved', 'club', $adminID, $row['clubName'] ?? 'Club registration', null);
+	                    }
+	                    $msg = 'Club approved successfully.';
                     $msgType = 'success';
                 }
             } elseif ($action === 'decline') {
@@ -57,9 +60,15 @@
                     $stmt = $conn->prepare("UPDATE admins SET status = 'declined', decline_reason = ? WHERE adminID = ? AND status = 'pending'");
                     $stmt->bind_param("ss", $declineReason, $adminID);
                     $stmt->execute();
-                    if ($stmt->affected_rows > 0) {
-                        $msg = 'Club registration declined.';
-                        $msgType = 'success';
+	                    if ($stmt->affected_rows > 0) {
+	                        $clubInfo = $conn->prepare("SELECT clubName FROM admins WHERE adminID = ?");
+	                        $clubInfo->bind_param("s", $adminID);
+	                        $clubInfo->execute();
+	                        $clubRow = $clubInfo->get_result()->fetch_assoc();
+	                        $clubInfo->close();
+	                        logModeratorActivity($conn, $moderatorID, $moderatorName, 'declined', 'club', $adminID, $clubRow['clubName'] ?? 'Club registration', $declineReason);
+	                        $msg = 'Club registration declined.';
+	                        $msgType = 'success';
                     }
                 }
             }

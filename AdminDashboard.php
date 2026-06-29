@@ -10,11 +10,52 @@
     }
     // Flash message for popup
     $flashMessage = $_SESSION['flash_message'] ?? null;
+    $announcementMessage = $_SESSION['announcement_flash'] ?? null;
     unset($_SESSION['flash_message']);
-    session_write_close();
+    unset($_SESSION['announcement_flash']);
 
     $adminID = $_SESSION['admin_id'];
     $clubName = isset($_SESSION['club_name']) ? $_SESSION['club_name'] : "Club Admin";
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_announcement'])) {
+        $announcementTitle = trim($_POST['announcement_title'] ?? '');
+        $announcementContent = trim($_POST['announcement_content'] ?? '');
+        $announcementEventID = !empty($_POST['announcement_event_id']) ? (int)$_POST['announcement_event_id'] : null;
+
+        if ($announcementTitle !== '' && $announcementContent !== '') {
+            $annStmt = $conn->prepare("INSERT INTO announcements (adminID, eventID, title, content) VALUES (?, ?, ?, ?)");
+            $annStmt->bind_param("siss", $adminID, $announcementEventID, $announcementTitle, $announcementContent);
+            $annStmt->execute();
+            $annStmt->close();
+            $_SESSION['announcement_flash'] = 'Announcement posted to student dashboard.';
+            header("Location: AdminDashboard.php#announcements");
+            exit();
+        }
+
+        $announcementMessage = 'Please fill in both announcement title and content.';
+    }
+
+    session_write_close();
+
+    $eventOptionStmt = $conn->prepare("SELECT eventID, eventTitle, eventDate, status FROM events WHERE adminID = ? ORDER BY eventDate DESC LIMIT 30");
+    $eventOptionStmt->bind_param("s", $adminID);
+    $eventOptionStmt->execute();
+    $announcementEvents = $eventOptionStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $eventOptionStmt->close();
+
+    $announcementStmt = $conn->prepare("
+        SELECT an.announcementID, an.title, an.content, an.created_at, e.eventTitle
+        FROM announcements an
+        LEFT JOIN events e ON an.eventID = e.eventID
+        WHERE an.adminID = ?
+          AND DATE(an.created_at) = CURDATE()
+        ORDER BY an.created_at DESC
+        LIMIT 3
+    ");
+    $announcementStmt->bind_param("s", $adminID);
+    $announcementStmt->execute();
+    $adminAnnouncements = $announcementStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $announcementStmt->close();
 
     $query = "SELECT * FROM events WHERE adminID = ? ORDER BY eventDate ASC";
     $stmt = $conn->prepare($query);
@@ -79,6 +120,43 @@
                 <a href="CreateEvent.php" class="btn-primary no-deco">Create New Event</a>
             </div>
         </header>
+
+        <?php if ($announcementMessage): ?>
+            <div class="msg-banner feedback-success-banner"><?php echo htmlspecialchars($announcementMessage); ?></div>
+        <?php endif; ?>
+
+        <section class="announcement-admin-panel" id="announcements">
+            <div class="announcement-admin-copy">
+                <p class="section-label">Announcement</p>
+                <h3>Broadcast to Student Dashboard</h3>
+                <p>Post important venue changes, reminders, or event updates for students to see first.</p>
+            </div>
+            <form method="POST" class="announcement-admin-form">
+                <select name="announcement_event_id" class="form-select">
+                    <option value="">General announcement</option>
+                    <?php foreach ($announcementEvents as $eventOption): ?>
+                        <option value="<?php echo (int)$eventOption['eventID']; ?>">
+                            <?php echo htmlspecialchars($eventOption['eventTitle']); ?> · <?php echo date('d M Y', strtotime($eventOption['eventDate'])); ?> · <?php echo htmlspecialchars(ucfirst($eventOption['status'] ?? 'pending')); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <input type="text" name="announcement_title" class="form-input" maxlength="150" placeholder="Announcement title" required>
+                <textarea name="announcement_content" class="form-textarea" rows="3" placeholder="Write the update for students..." required></textarea>
+                <button type="submit" name="post_announcement" class="btn-primary-sm">Post Announcement</button>
+            </form>
+            <?php if (!empty($adminAnnouncements)): ?>
+                <div class="announcement-admin-list">
+                    <?php foreach ($adminAnnouncements as $announcement): ?>
+                        <article>
+                            <strong><?php echo htmlspecialchars($announcement['title']); ?></strong>
+                            <span class="announcement-event-chip"><?php echo !empty($announcement['eventTitle']) ? htmlspecialchars($announcement['eventTitle']) : 'General announcement'; ?></span>
+                            <p><?php echo nl2br(htmlspecialchars($announcement['content'])); ?></p>
+                            <small><?php echo date('d M Y h:i A', strtotime($announcement['created_at'])); ?></small>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
 
         <section class="admin-status-strip" aria-label="Event status overview">
             <a href="#ongoing-events" class="admin-status-card status-ongoing">
@@ -233,8 +311,9 @@
                             </div>
                         </div>
 
-                        <div class="action-buttons completed-report-actions">
-                            <a href="ExportReport.php?id=<?php echo $event['eventID']; ?>" class="btn-outline btn-full-width">Generate Report</a>
+                        <div class="action-buttons equal-action-buttons completed-report-actions">
+                            <a href="EditEvent.php?id=<?php echo $event['eventID']; ?>" class="action-pill-btn">Details</a>
+                            <a href="ExportReport.php?id=<?php echo $event['eventID']; ?>" class="btn-danger">Generate Report</a>
                         </div>
                     </article>
                 <?php endforeach; ?>

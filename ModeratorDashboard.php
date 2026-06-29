@@ -16,6 +16,8 @@
     $pendingEvents = 0;
     $activeClubs = 0;
     $recentActivity = [];
+    $pendingReviewQueue = [];
+    $moderatorLogs = [];
 
     try {
         $result = $conn->query("SELECT COUNT(*) AS cnt FROM events");
@@ -39,9 +41,9 @@
             }
         }
 
-        $result = $conn->query("SELECT adminID, name, clubName, clubEmail, status, created_at FROM admins WHERE status = 'pending' ORDER BY created_at DESC LIMIT 10");
-        if ($result) {
-            $clubs = $result->fetch_all(MYSQLI_ASSOC);
+	        $result = $conn->query("SELECT adminID, name, clubName, clubEmail, status, created_at FROM admins WHERE status = 'pending' ORDER BY created_at DESC LIMIT 10");
+	        if ($result) {
+	            $clubs = $result->fetch_all(MYSQLI_ASSOC);
             foreach ($clubs as $club) {
                 $recentActivity[] = [
                     'activity_type' => 'club',
@@ -57,13 +59,39 @@
             }
         }
 
-        usort($recentActivity, function ($a, $b) {
-            return strtotime($b['created_at'] ?? '1970-01-01') <=> strtotime($a['created_at'] ?? '1970-01-01');
-        });
-        $recentActivity = array_slice($recentActivity, 0, 10);
-    } catch (mysqli_sql_exception $e) {
-        error_log('ModeratorDashboard DB error: ' . $e->getMessage());
-    }
+	        usort($recentActivity, function ($a, $b) {
+	            return strtotime($b['created_at'] ?? '1970-01-01') <=> strtotime($a['created_at'] ?? '1970-01-01');
+	        });
+	        $recentActivity = array_slice($recentActivity, 0, 10);
+
+	        $eventQueue = $conn->query("SELECT e.eventID, e.eventTitle, e.eventDate, e.eventTime, e.venue, e.created_at, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'pending' ORDER BY e.created_at DESC LIMIT 6");
+	        if ($eventQueue) {
+	            foreach ($eventQueue->fetch_all(MYSQLI_ASSOC) as $item) {
+	                $item['queue_type'] = 'event';
+	                $pendingReviewQueue[] = $item;
+	            }
+	        }
+
+	        $clubQueue = $conn->query("SELECT adminID, name, clubName, clubEmail, created_at FROM admins WHERE status = 'pending' ORDER BY created_at DESC LIMIT 6");
+	        if ($clubQueue) {
+	            foreach ($clubQueue->fetch_all(MYSQLI_ASSOC) as $item) {
+	                $item['queue_type'] = 'club';
+	                $pendingReviewQueue[] = $item;
+	            }
+	        }
+
+	        usort($pendingReviewQueue, function ($a, $b) {
+	            return strtotime($b['created_at'] ?? '1970-01-01') <=> strtotime($a['created_at'] ?? '1970-01-01');
+	        });
+	        $pendingReviewQueue = array_slice($pendingReviewQueue, 0, 8);
+
+	        $logResult = $conn->query("SELECT * FROM moderator_activity_log ORDER BY created_at DESC LIMIT 8");
+	        if ($logResult) {
+	            $moderatorLogs = $logResult->fetch_all(MYSQLI_ASSOC);
+	        }
+	    } catch (mysqli_sql_exception $e) {
+	        error_log('ModeratorDashboard DB error: ' . $e->getMessage());
+	    }
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -131,9 +159,75 @@
                     </div>
                 </a>
             </div>
-        </div>
+	        </div>
 
-        <div class="section-label">Recent Activity</div>
+	        <div class="mod-dashboard-two-col">
+	            <section class="mod-review-panel">
+	                <div class="mod-panel-head">
+	                    <div>
+	                        <p class="section-label">Pending Review Queue</p>
+	                        <h3>Items Requiring Action</h3>
+	                    </div>
+	                    <span><?php echo count($pendingReviewQueue); ?></span>
+	                </div>
+	                <?php if (!empty($pendingReviewQueue)): ?>
+	                    <div class="mod-review-list">
+	                        <?php foreach ($pendingReviewQueue as $item): ?>
+	                            <?php
+	                                $isEventQueue = ($item['queue_type'] ?? '') === 'event';
+	                                $queueTarget = $isEventQueue
+	                                    ? 'EventDetailsModerator.php?id=' . (int)$item['eventID']
+	                                    : 'ModeratorClubs.php?tab=pending';
+	                                $queueTitle = $isEventQueue ? ($item['eventTitle'] ?? 'Pending event') : ($item['clubName'] ?? 'Pending club');
+	                                $queueMeta = $isEventQueue
+	                                    ? (($item['club_name'] ?? 'Unknown club') . ' · ' . date('d M Y', strtotime($item['eventDate'])))
+	                                    : (($item['name'] ?? 'Club admin') . ' · ' . ($item['clubEmail'] ?? ''));
+	                            ?>
+	                            <a href="<?php echo htmlspecialchars($queueTarget); ?>" class="mod-review-item">
+	                                <span class="mod-review-type <?php echo $isEventQueue ? 'event' : 'club'; ?>"><?php echo $isEventQueue ? 'Event' : 'Club'; ?></span>
+	                                <strong><?php echo htmlspecialchars($queueTitle); ?></strong>
+	                                <small><?php echo htmlspecialchars($queueMeta); ?></small>
+	                            </a>
+	                        <?php endforeach; ?>
+	                    </div>
+	                <?php else: ?>
+	                    <div class="event-empty-box compact-empty-box">
+	                        <p>No pending review items.</p>
+	                    </div>
+	                <?php endif; ?>
+	            </section>
+
+	            <section class="mod-review-panel">
+	                <div class="mod-panel-head">
+	                    <div>
+	                        <p class="section-label">Activity Log</p>
+	                        <h3>Recent Moderator Actions</h3>
+	                    </div>
+	                </div>
+	                <?php if (!empty($moderatorLogs)): ?>
+	                    <div class="mod-log-list">
+	                        <?php foreach ($moderatorLogs as $log): ?>
+	                            <article class="mod-log-item">
+	                                <span class="mod-log-action"><?php echo htmlspecialchars(ucfirst($log['action_type'])); ?></span>
+	                                <div>
+	                                    <strong><?php echo htmlspecialchars($log['target_title'] ?? 'Untitled'); ?></strong>
+	                                    <small><?php echo htmlspecialchars($log['moderatorName'] ?? 'Moderator'); ?> · <?php echo date('d M Y h:i A', strtotime($log['created_at'])); ?></small>
+	                                    <?php if (!empty($log['details'])): ?>
+	                                        <p><?php echo htmlspecialchars($log['details']); ?></p>
+	                                    <?php endif; ?>
+	                                </div>
+	                            </article>
+	                        <?php endforeach; ?>
+	                    </div>
+	                <?php else: ?>
+	                    <div class="event-empty-box compact-empty-box">
+	                        <p>No moderator actions logged yet.</p>
+	                    </div>
+	                <?php endif; ?>
+	            </section>
+	        </div>
+
+	        <div class="section-label">Recent Activity</div>
 
         <div class="search-toolbar">
             <div class="search-wrap">

@@ -301,6 +301,20 @@
         error_log('DB student_notifications table creation error: ' . $e->getMessage());
     }
 
+    // Track event reminder notifications so students do not receive duplicates
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS event_reminders_sent (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            studentID VARCHAR(20) NOT NULL,
+            eventID INT UNSIGNED NOT NULL,
+            reminder_date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_event_reminder (studentID, eventID, reminder_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB event_reminders_sent table creation error: ' . $e->getMessage());
+    }
+
     // Add `clubID` column to `student_notifications` table (migration for existing tables)
     try {
         $check = $conn->query("SHOW COLUMNS FROM student_notifications LIKE 'clubID'");
@@ -353,6 +367,41 @@
         error_log('DB moderator_notifications table creation error: ' . $e->getMessage());
     }
 
+    // Create moderator activity log for approvals, declines, edits, and deletions
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS moderator_activity_log (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            moderatorID VARCHAR(20) DEFAULT NULL,
+            moderatorName VARCHAR(255) DEFAULT NULL,
+            action_type VARCHAR(50) NOT NULL,
+            target_type VARCHAR(30) NOT NULL,
+            target_id VARCHAR(50) DEFAULT NULL,
+            target_title VARCHAR(255) DEFAULT NULL,
+            details TEXT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB moderator_activity_log table creation error: ' . $e->getMessage());
+    }
+
+    // Create `announcements` table for admin broadcasts to student dashboard
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS announcements (
+            announcementID INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            adminID VARCHAR(20) NOT NULL,
+            eventID INT UNSIGNED DEFAULT NULL,
+            title VARCHAR(150) NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $check = $conn->query("SHOW COLUMNS FROM announcements LIKE 'eventID'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE announcements ADD COLUMN eventID INT UNSIGNED DEFAULT NULL AFTER adminID");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB announcements table creation error: ' . $e->getMessage());
+    }
+
 // ─── Helper functions ──────────────────────────────────────
 
 function formatDateRange($eventDate, $eventEndDate = null) {
@@ -373,5 +422,17 @@ function getEventPeriod($eventDate, $eventEndDate, $currentDate) {
     if ($currentDate >= $eventDate && $currentDate <= $end) return 'ongoing';
     if ($currentDate < $eventDate) return 'upcoming';
     return 'past';
+}
+
+function logModeratorActivity($conn, $moderatorID, $moderatorName, $actionType, $targetType, $targetID, $targetTitle, $details = null) {
+    try {
+        $stmt = $conn->prepare("INSERT INTO moderator_activity_log (moderatorID, moderatorName, action_type, target_type, target_id, target_title, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $targetID = $targetID !== null ? (string)$targetID : null;
+        $stmt->bind_param("sssssss", $moderatorID, $moderatorName, $actionType, $targetType, $targetID, $targetTitle, $details);
+        $stmt->execute();
+        $stmt->close();
+    } catch (mysqli_sql_exception $e) {
+        error_log('Moderator activity log error: ' . $e->getMessage());
+    }
 }
 ?>

@@ -51,11 +51,35 @@
                     $updateStmt->bind_param("isi", $rating, $comment, $existing['feedbackID']);
                     $updateStmt->execute();
                     $updateStmt->close();
+                    $reviewAction = 'updated a review';
                 } else {
                     $insertStmt = $conn->prepare("INSERT INTO event_feedback (eventID, studentID, rating, `comment`) VALUES (?, ?, ?, ?)");
                     $insertStmt->bind_param("isis", $feedbackEventID, $studentID, $rating, $comment);
                     $insertStmt->execute();
                     $insertStmt->close();
+                    $reviewAction = 'left a review';
+                }
+
+                $reviewInfoStmt = $conn->prepare("
+                    SELECT e.eventTitle, e.adminID, s.name AS studentName
+                    FROM events e
+                    JOIN students s ON s.studentID = ?
+                    WHERE e.eventID = ?
+                    LIMIT 1
+                ");
+                $reviewInfoStmt->bind_param("si", $studentID, $feedbackEventID);
+                $reviewInfoStmt->execute();
+                $reviewInfo = $reviewInfoStmt->get_result()->fetch_assoc();
+                $reviewInfoStmt->close();
+
+                if ($reviewInfo && !empty($reviewInfo['adminID'])) {
+                    $studentName = $reviewInfo['studentName'] ?: $studentID;
+                    $eventTitle = $reviewInfo['eventTitle'] ?: 'your event';
+                    $adminMsg = $studentName . ' ' . $reviewAction . ' for ' . $eventTitle . '.';
+                    $adminNotifStmt = $conn->prepare("INSERT INTO notifications (adminID, message, eventID) VALUES (?, ?, ?)");
+                    $adminNotifStmt->bind_param("ssi", $reviewInfo['adminID'], $adminMsg, $feedbackEventID);
+                    $adminNotifStmt->execute();
+                    $adminNotifStmt->close();
                 }
 
                 header("Location: MyEvent.php?tab=history&feedback=1");
@@ -75,7 +99,7 @@
     $activeStmt->close();
 
     $pastStmt = $conn->prepare("
-        SELECT e.*, a.clubName, c.clubID, f.feedbackID, f.rating, f.`comment` AS feedbackComment
+        SELECT e.*, a.clubName, c.clubID, r.attendance_status, f.feedbackID, f.rating, f.`comment` AS feedbackComment
         FROM events e
         JOIN registrations r ON e.eventID = r.eventID
         LEFT JOIN admins a ON e.adminID = a.adminID
@@ -186,6 +210,7 @@
                                     </div>
                                 <?php endif; ?>
                                 <form method="POST" class="feedback-form">
+                                    <p class="feedback-form-title">Review this event</p>
                                     <input type="hidden" name="event_id" value="<?php echo (int)$row['eventID']; ?>">
                                     <div class="rating-row" aria-label="Star rating">
                                         <?php for ($star = 5; $star >= 1; $star--): ?>
@@ -200,6 +225,9 @@
                         </div>
                         <div class="card-actions">
                             <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline">Details →</a>
+                            <?php if (($row['attendance_status'] ?? 'absent') === 'present'): ?>
+                                <a href="Certificate.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline certificate-btn">Certificate</a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 <?php endwhile; ?>

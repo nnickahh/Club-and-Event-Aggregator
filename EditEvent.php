@@ -274,6 +274,7 @@
     $isOngoing = $period === 'ongoing' && $event['status'] === 'approved';
     $isUpcoming = $period === 'upcoming' && $event['status'] === 'approved';
     $isPending = $event['status'] === 'pending';
+    $showAttendance = $isOngoing || $period === 'past' || $event['status'] === 'ended';
     $canEdit = $isPending || $isUpcoming;
 
     // Handle end event
@@ -474,6 +475,21 @@
     $waitStmt->execute();
     $waitlist = $waitStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $waitStmt->close();
+
+    // Fetch student reviews for this event
+    $feedbackStmt = $conn->prepare("
+        SELECT f.feedbackID, f.studentID, f.rating, f.`comment`, f.created_at, s.name, s.email
+        FROM event_feedback f
+        JOIN students s ON f.studentID = s.studentID
+        WHERE f.eventID = ?
+        ORDER BY f.created_at DESC
+    ");
+    $feedbackStmt->bind_param("i", $eventID);
+    $feedbackStmt->execute();
+    $eventFeedback = $feedbackStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $feedbackStmt->close();
+    $reviewCount = count($eventFeedback);
+    $averageRating = $reviewCount > 0 ? array_sum(array_map(fn($f) => (int)$f['rating'], $eventFeedback)) / $reviewCount : 0;
 
     $totalRegistered = count($participants);
     if ($totalRegistered > (int)$event['capacity']) {
@@ -693,9 +709,9 @@
                         <div class="num"><?php echo $totalRegistered; ?> / <?php echo $capacity; ?></div>
                         <div class="lbl">Registered</div>
                     </div>
-                    <?php if ($isOngoing): ?>
+                    <?php if ($showAttendance): ?>
                     <div class="stat-box">
-                        <div class="num"><?php echo $totalPresent; ?> / <?php echo $totalRegistered; ?></div>
+                        <div class="num" id="attendanceDoneStat"><?php echo $totalPresent; ?> / <?php echo $totalRegistered; ?></div>
                         <div class="lbl">Present</div>
                     </div>
                     <?php endif; ?>
@@ -708,6 +724,39 @@
                         <div class="lbl">Payment Done</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Student Reviews -->
+            <div class="edit-card full-width" id="student-reviews">
+                <h3>
+                    <span>Student Reviews (<?php echo $reviewCount; ?>)</span>
+                    <?php if ($reviewCount > 0): ?>
+                        <span class="admin-review-average"><?php echo number_format($averageRating, 1); ?> / 5 ★</span>
+                    <?php endif; ?>
+                </h3>
+                <?php if (!empty($eventFeedback)): ?>
+                    <div class="admin-review-list">
+                        <?php foreach ($eventFeedback as $review): ?>
+                            <article class="admin-review-item">
+                                <div class="admin-review-head">
+                                    <div>
+                                        <strong><?php echo htmlspecialchars($review['name']); ?></strong>
+                                        <span class="text-xs-muted"><?php echo htmlspecialchars($review['studentID']); ?></span>
+                                    </div>
+                                    <span class="feedback-stars"><?php echo str_repeat('★', (int)$review['rating']) . str_repeat('☆', 5 - (int)$review['rating']); ?></span>
+                                </div>
+                                <?php if (!empty($review['comment'])): ?>
+                                    <p><?php echo nl2br(htmlspecialchars($review['comment'])); ?></p>
+                                <?php else: ?>
+                                    <p class="text-xs-muted">No comment added.</p>
+                                <?php endif; ?>
+                                <small class="text-xs-muted"><?php echo date('d M Y h:i A', strtotime($review['created_at'])); ?></small>
+                            </article>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <p class="text-center text-xs-muted empty-table-note">No student reviews yet.</p>
+                <?php endif; ?>
             </div>
 
             <!-- Participant List -->
@@ -729,7 +778,7 @@
                                 <th>Email</th>
                                 <th>Payment Method</th>
                                 <th>Payment Status</th>
-                                <?php if ($isOngoing): ?><th>Attendance</th><?php endif; ?>
+                                <?php if ($showAttendance): ?><th>Attendance</th><?php endif; ?>
                                 <th>Remove</th>
                             </tr>
                         </thead>
@@ -766,7 +815,7 @@
                                         <a href="<?php echo htmlspecialchars($receipt); ?>" target="_blank" rel="noopener" class="receipt-link">(attachment)</a>
                                     <?php endif; ?>
                                 <?php endif; ?></td>
-                                <?php if ($isOngoing): ?>
+                                <?php if ($showAttendance): ?>
                                 <td>
                                     <button class="toggle-btn <?php echo $p['attendance_status'] === 'present' ? 'on' : 'off'; ?>"
                                             data-sid="<?php echo htmlspecialchars($p['studentID']); ?>"
@@ -981,7 +1030,17 @@
             btn.className = 'toggle-btn ' + (newStatus === 'paid' || newStatus === 'present' ? 'on' : 'off');
             btn.textContent = (newStatus === 'paid' || newStatus === 'present') ? '✅' : 'X';
             if (type === 'payment') updatePaymentStats();
+            if (type === 'attendance') updateAttendanceStats();
         });
+    }
+
+    function updateAttendanceStats() {
+        const attendanceDoneStat = document.getElementById('attendanceDoneStat');
+        if (!attendanceDoneStat) return;
+
+        const attendanceButtons = document.querySelectorAll('.toggle-btn[data-type="attendance"]');
+        const presentCount = document.querySelectorAll('.toggle-btn[data-type="attendance"].on').length;
+        attendanceDoneStat.textContent = presentCount + ' / ' + attendanceButtons.length;
     }
 
     function updatePaymentStats() {

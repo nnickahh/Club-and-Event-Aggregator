@@ -4,6 +4,47 @@
     if (isset($_SESSION['student_id'])) {
         require_once 'db_connect.php';
         $studentID = $_SESSION['student_id'];
+        $today = date('Y-m-d');
+        $tomorrow = date('Y-m-d', strtotime('+1 day'));
+
+        $reminderStmt = $conn->prepare("
+            SELECT e.eventID, e.eventTitle, e.eventDate, e.eventTime, e.venue
+            FROM registrations r
+            JOIN events e ON r.eventID = e.eventID
+            LEFT JOIN event_reminders_sent ers
+              ON ers.studentID = r.studentID
+             AND ers.eventID = e.eventID
+             AND ers.reminder_date = ?
+            WHERE r.studentID = ?
+              AND e.status = 'approved'
+              AND e.eventDate = ?
+              AND ers.id IS NULL
+        ");
+        $reminderStmt->bind_param("sss", $today, $studentID, $tomorrow);
+        $reminderStmt->execute();
+        $reminderEvents = $reminderStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $reminderStmt->close();
+
+        if (!empty($reminderEvents)) {
+            $sentStmt = $conn->prepare("INSERT IGNORE INTO event_reminders_sent (studentID, eventID, reminder_date) VALUES (?, ?, ?)");
+            $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID) VALUES (?, ?, ?)");
+            foreach ($reminderEvents as $eventReminder) {
+                $eventID = (int)$eventReminder['eventID'];
+                $sentStmt->bind_param("sis", $studentID, $eventID, $today);
+                $sentStmt->execute();
+
+                if ($sentStmt->affected_rows > 0) {
+                    $eventTime = !empty($eventReminder['eventTime']) ? date('h:i A', strtotime($eventReminder['eventTime'])) : 'the scheduled time';
+                    $eventVenue = !empty($eventReminder['venue']) ? ' at ' . $eventReminder['venue'] : '';
+                    $message = 'Reminder: ' . $eventReminder['eventTitle'] . ' is tomorrow at ' . $eventTime . $eventVenue . '.';
+                    $notifStmt->bind_param("ssi", $studentID, $message, $eventID);
+                    $notifStmt->execute();
+                }
+            }
+            $sentStmt->close();
+            $notifStmt->close();
+        }
+
         $countStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM student_notifications WHERE studentID = ? AND is_read = 0");
         $countStmt->bind_param("s", $studentID);
         $countStmt->execute();

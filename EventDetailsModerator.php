@@ -18,6 +18,8 @@
     $isEditing = isset($_GET['edit']) && $_GET['edit'] === '1';
     $message = '';
     $msgType = '';
+    $moderatorID = $_SESSION['moderator_id'] ?? null;
+    $moderatorName = $_SESSION['full_name'] ?? 'Moderator';
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $action = $_POST['action'];
@@ -59,10 +61,11 @@
                     $adminStmt->bind_param("ssi", $eRow['adminID'], $adminMsg, $eventID);
                     $adminStmt->execute();
                     $adminStmt->close();
-                }
-                $message = 'Event has been approved successfully.';
-                $msgType = 'success';
-            } elseif ($action === 'decline') {
+	                }
+	                logModeratorActivity($conn, $moderatorID, $moderatorName, 'approved', 'event', $eventID, $eRow['eventTitle'] ?? 'Event', null);
+	                $message = 'Event has been approved successfully.';
+	                $msgType = 'success';
+	            } elseif ($action === 'decline') {
                 $declineReason = trim($_POST['decline_reason'] ?? '');
                 $eStmt = $conn->prepare("SELECT eventTitle, adminID FROM events WHERE eventID = ?");
                 $eStmt->bind_param("i", $eventID);
@@ -80,12 +83,13 @@
                     $adminMsg = $eRow['eventTitle'] . ' requires changes.' . $reasonText;
                     $aStmt = $conn->prepare("INSERT INTO notifications (adminID, message, eventID) VALUES (?, ?, ?)");
                     $aStmt->bind_param("ssi", $eRow['adminID'], $adminMsg, $eventID);
-                    $aStmt->execute();
-                    $aStmt->close();
-                }
-                $message = 'Event has been declined. The admin can resubmit after making changes.';
-                $msgType = 'success';
-            } elseif ($action === 'update') {
+	                    $aStmt->execute();
+	                    $aStmt->close();
+	                }
+	                logModeratorActivity($conn, $moderatorID, $moderatorName, 'declined', 'event', $eventID, $eRow['eventTitle'] ?? 'Event', $declineReason);
+	                $message = 'Event has been declined. The admin can resubmit after making changes.';
+	                $msgType = 'success';
+	            } elseif ($action === 'update') {
                 $title = $_POST['eventTitle'] ?? '';
                 $date = $_POST['eventDate'] ?? '';
                 $endDate = !empty(trim($_POST['eventEndDate'] ?? '')) ? trim($_POST['eventEndDate']) : null;
@@ -96,9 +100,10 @@
                 $description = $_POST['description'] ?? '';
                 $stmt = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=? WHERE eventID=?");
                 $stmt->bind_param("ssssssisi", $title, $date, $endDate, $time, $endTime, $venue, $capacity, $description, $eventID);
-                $stmt->execute();
-                $message = 'Event has been updated successfully.';
-                $msgType = 'success';
+	                $stmt->execute();
+	                logModeratorActivity($conn, $moderatorID, $moderatorName, 'updated', 'event', $eventID, $title, null);
+	                $message = 'Event has been updated successfully.';
+	                $msgType = 'success';
                 $isEditing = false;
             } elseif ($action === 'delete') {
                 $deleteReason = trim($_POST['delete_reason'] ?? '');
@@ -139,9 +144,10 @@
                     $modMsg = $title . ' has been deleted/cancelled.' . $reasonText;
                     $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message) VALUES (?)");
                     $modStmt->bind_param("s", $modMsg);
-                    $modStmt->execute();
-                    $modStmt->close();
-                }
+	                    $modStmt->execute();
+	                    $modStmt->close();
+	                    logModeratorActivity($conn, $moderatorID, $moderatorName, 'deleted', 'event', $eventID, $title, $deleteReason);
+	                }
 
                 // Clean up related records
                 $conn->query("DELETE FROM registrations WHERE eventID = $eventID");
@@ -196,10 +202,34 @@
     // Fetch registered count
     $regCntStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM registrations WHERE eventID = ?");
     $regCntStmt->bind_param("i", $eventID);
-    $regCntStmt->execute();
-    $regCount = (int)$regCntStmt->get_result()->fetch_assoc()['cnt'];
-    $regCntStmt->close();
-?>
+	    $regCntStmt->execute();
+	    $regCount = (int)$regCntStmt->get_result()->fetch_assoc()['cnt'];
+	    $regCntStmt->close();
+
+	    $eventConflicts = [];
+	    $conflictStartDate = $event['eventDate'];
+	    $conflictEndDate = $event['eventEndDate'] ?: $event['eventDate'];
+	    $conflictStartTime = $event['eventTime'] ?: '00:00:00';
+	    $conflictEndTime = $event['eventEndTime'] ?: $event['eventTime'];
+	    $conflictStmt = $conn->prepare("
+	        SELECT e.eventID, e.eventTitle, e.eventDate, e.eventEndDate, e.eventTime, e.eventEndTime, a.clubName
+	        FROM events e
+	        LEFT JOIN admins a ON e.adminID = a.adminID
+	        WHERE e.eventID <> ?
+	          AND e.status = 'approved'
+	          AND e.venue = ?
+	          AND e.eventDate <= ?
+	          AND COALESCE(e.eventEndDate, e.eventDate) >= ?
+	          AND e.eventTime <= ?
+	          AND COALESCE(e.eventEndTime, e.eventTime) >= ?
+	        ORDER BY e.eventDate ASC, e.eventTime ASC
+	        LIMIT 5
+	    ");
+	    $conflictStmt->bind_param("isssss", $eventID, $event['venue'], $conflictEndDate, $conflictStartDate, $conflictEndTime, $conflictStartTime);
+	    $conflictStmt->execute();
+	    $eventConflicts = $conflictStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+	    $conflictStmt->close();
+	?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -332,10 +362,27 @@
                             </div>
                             <?php endif; ?>
                         <?php endif; ?>
-                    <?php endif; ?>
-                </div>
+	                    <?php endif; ?>
+	                </div>
 
-                <hr class="divider-light">
+	                <?php if (!empty($eventConflicts)): ?>
+	                    <div class="mod-conflict-warning">
+	                        <strong>Schedule conflict warning</strong>
+	                        <p>This event overlaps with approved event(s) at the same venue:</p>
+	                        <?php foreach ($eventConflicts as $conflict): ?>
+	                            <a href="EventDetailsModerator.php?id=<?php echo (int)$conflict['eventID']; ?>">
+	                                <?php echo htmlspecialchars($conflict['eventTitle']); ?>
+	                                <span>
+	                                    <?php echo htmlspecialchars($conflict['clubName'] ?? 'Unknown club'); ?> ·
+	                                    <?php echo formatDateRange($conflict['eventDate'], $conflict['eventEndDate'] ?? null); ?> ·
+	                                    <?php echo date('h:iA', strtotime($conflict['eventTime'])); ?><?php if (!empty($conflict['eventEndTime'])): ?> - <?php echo date('h:iA', strtotime($conflict['eventEndTime'])); ?><?php endif; ?>
+	                                </span>
+	                            </a>
+	                        <?php endforeach; ?>
+	                    </div>
+	                <?php endif; ?>
+	
+	                <hr class="divider-light">
 
                 <h3>About This Event</h3>
                 <p class="event-description">
