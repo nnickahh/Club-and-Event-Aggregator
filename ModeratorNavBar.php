@@ -32,6 +32,7 @@
             <?php endif; ?>
         </a>
         <a href="ModeratorCalendar.php" class="<?php echo $currentPage === 'calendar' ? 'active' : ''; ?>">Calendar</a>
+        <a href="ModeratorEventSummary.php" class="<?php echo $currentPage === 'summary' ? 'active' : ''; ?>">Summary</a>
         <div class="profile-dropdown">
             <span class="profile-name">
                 🔔<?php if ($modNotifCount > 0): ?><sup class="notif-sup"><?php echo $modNotifCount; ?></sup><?php endif; ?>
@@ -57,7 +58,7 @@
                     <a class="notif-empty">No notifications</a>
                 <?php endif; ?>
                 <hr class="notif-sep">
-                <a href="ProfileSettings.php">Profile</a>
+                <a href="ModeratorProfile.php">Profile</a>
                 <a href="LogOut.php">Sign Out</a>
             </div>
         </div>

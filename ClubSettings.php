@@ -20,7 +20,7 @@
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['add_member']) || isset($_POST['update_role']) || isset($_POST['remove_member']))) {
         $activeSettingsTab = 'members';
     }
-    if (!in_array($activeSettingsTab, ['overview', 'events', 'members', 'contacts'], true)) {
+    if (!in_array($activeSettingsTab, ['overview', 'members', 'contacts'], true)) {
         $activeSettingsTab = 'overview';
     }
     if (isset($_GET['member_added'])) {
@@ -141,45 +141,6 @@
             $message = "<div class='toast-notification error'>❌ Error processing profile adjustments.</div>";
         }
     }
-
-    // Handle end event action
-    if (isset($_POST['end_event'])) {
-        $endEventID = (int)$_POST['end_event_id'];
-        $upd = $conn->prepare("UPDATE events SET status = 'ended' WHERE eventID = ? AND adminID = ?");
-        $upd->bind_param("is", $endEventID, $adminID);
-        $upd->execute();
-        $upd->close();
-        header("Location: ClubSettings.php");
-        exit();
-    }
-
-    // 3. Collect active tracked events
-    $currentDate = date('Y-m-d');
-    $eventStmt = $conn->prepare("SELECT eventID, eventTitle, eventDate, venue, eventTime, eventEndTime, status FROM events WHERE adminID = ? ORDER BY eventDate ASC");
-    $eventStmt->bind_param("s", $adminID);
-    $eventStmt->execute();
-    $eventsResult = $eventStmt->get_result();
-    
-    $ongoingEvents = [];
-    $upcomingEvents = [];
-    $pendingEvents = [];
-    $completedEvents = [];
-    $cancelledEvents = [];
-    while($ev = $eventsResult->fetch_assoc()) {
-        if ($ev['status'] === 'pending') {
-            $pendingEvents[] = $ev;
-        } elseif ($ev['status'] === 'approved') {
-            $p = getEventPeriod($ev['eventDate'], $ev['eventEndDate'] ?? null, $currentDate);
-            if ($p === 'ongoing') $ongoingEvents[] = $ev;
-            elseif ($p === 'upcoming') $upcomingEvents[] = $ev;
-            else $completedEvents[] = $ev;
-        } elseif ($ev['status'] === 'ended') {
-            $completedEvents[] = $ev;
-        } elseif ($ev['status'] === 'cancelled') {
-            $cancelledEvents[] = $ev;
-        }
-    }
-    $eventStmt->close();
 
     // Handle manual member add
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_member'])) {
@@ -305,29 +266,42 @@
 
     // Handle member removal
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_member'])) {
-        $targetStudent = trim($_POST['student_id'] ?? '');
+        $targetStudents = [];
+        if (isset($_POST['student_ids']) && is_array($_POST['student_ids'])) {
+            $targetStudents = array_map('trim', $_POST['student_ids']);
+        } elseif (!empty($_POST['student_id'])) {
+            $targetStudents = [trim($_POST['student_id'])];
+        }
+        $targetStudents = array_values(array_unique(array_filter($targetStudents)));
         $removeReason = trim($_POST['remove_reason'] ?? '');
 
-        if ($targetStudent === '' || $removeReason === '') {
-            $message = "<div class='toast-notification error'>Removal reason is required.</div>";
+        if (empty($targetStudents) || $removeReason === '') {
+            $message = "<div class='toast-notification error'>Please select at least one member and write a removal reason.</div>";
         } else {
             $deleteStmt = $conn->prepare("DELETE FROM club_members WHERE studentID = ? AND adminID = ?");
-            $deleteStmt->bind_param("ss", $targetStudent, $adminID);
-            $deleteStmt->execute();
-            $removed = $deleteStmt->affected_rows > 0;
+            $removedStudents = [];
+            foreach ($targetStudents as $targetStudent) {
+                $deleteStmt->bind_param("ss", $targetStudent, $adminID);
+                $deleteStmt->execute();
+                if ($deleteStmt->affected_rows > 0) {
+                    $removedStudents[] = $targetStudent;
+                }
+            }
             $deleteStmt->close();
 
-            if ($removed) {
+            if (!empty($removedStudents)) {
                 $notifMessage = "You have been removed from {$clubName}. Reason: {$removeReason}";
-                if (!empty($clubID)) {
-                    $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, clubID) VALUES (?, ?, ?)");
-                    $notifStmt->bind_param("ssi", $targetStudent, $notifMessage, $clubID);
-                } else {
-                    $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message) VALUES (?, ?)");
-                    $notifStmt->bind_param("ss", $targetStudent, $notifMessage);
+                foreach ($removedStudents as $removedStudent) {
+                    if (!empty($clubID)) {
+                        $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, clubID) VALUES (?, ?, ?)");
+                        $notifStmt->bind_param("ssi", $removedStudent, $notifMessage, $clubID);
+                    } else {
+                        $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message) VALUES (?, ?)");
+                        $notifStmt->bind_param("ss", $removedStudent, $notifMessage);
+                    }
+                    $notifStmt->execute();
+                    $notifStmt->close();
                 }
-                $notifStmt->execute();
-                $notifStmt->close();
 
                 header("Location: ClubSettings.php?tab=members&member_removed=1");
                 exit();
@@ -423,7 +397,6 @@
 
             <div class="tab-navigation-bar">
                 <button type="button" class="tab-trigger <?php echo $activeSettingsTab === 'overview' ? 'active' : ''; ?>" onclick="switchActiveTab(event, 'overview-tab')">Overview</button>
-                <button type="button" class="tab-trigger <?php echo $activeSettingsTab === 'events' ? 'active' : ''; ?>" onclick="switchActiveTab(event, 'events-tab')">Events <span class="tab-counter"><?php echo count($ongoingEvents) + count($upcomingEvents) + count($pendingEvents) + count($completedEvents) + count($cancelledEvents); ?></span></button>
                 <button type="button" class="tab-trigger <?php echo $activeSettingsTab === 'members' ? 'active' : ''; ?>" onclick="switchActiveTab(event, 'members-tab')">Members <span class="tab-counter"><?php echo $membersResult->num_rows; ?></span></button>
                 <button type="button" class="tab-trigger <?php echo $activeSettingsTab === 'contacts' ? 'active' : ''; ?>" onclick="switchActiveTab(event, 'contacts-tab')">Contacts</button>
             </div>
@@ -460,162 +433,16 @@
             </div>
         </form>
 
-        <div id="events-tab" class="tab-content-panel <?php echo $activeSettingsTab === 'events' ? 'active' : ''; ?>">
-            <div class="section-flex-header">
-                <h3>Ongoing Events</h3>
-                <a href="CreateEvent.php" class="btn-modern-secondary">+ New Event</a>
-            </div>
-
-            <?php if (!empty($ongoingEvents)): ?>
-                <div class="modern-events-list">
-                    <?php foreach($ongoingEvents as $ev): ?>
-                        <div class="event-strip-card">
-                            <div class="date-badge-box">
-                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
-                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php else: ?>
-                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php endif; ?>
-                            </div>
-                            <div class="strip-main-info">
-                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
-                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
-                            </div>
-                            <div class="strip-actions">
-                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-
-            <?php if (!empty($upcomingEvents)): ?>
-                <div class="section-flex-header <?php echo !empty($ongoingEvents) ? 'cond-mt' : ''; ?>">
-                    <h3>Upcoming Events</h3>
-                </div>
-                <div class="modern-events-list">
-                    <?php foreach($upcomingEvents as $ev): ?>
-                        <div class="event-strip-card">
-                            <div class="date-badge-box">
-                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
-                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php else: ?>
-                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php endif; ?>
-                            </div>
-                            <div class="strip-main-info">
-                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
-                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
-                            </div>
-                            <div class="strip-actions">
-                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-
-            <?php if (!empty($pendingEvents)): ?>
-                <div class="section-flex-header <?php echo !empty($ongoingEvents) || !empty($upcomingEvents) ? 'cond-mt' : ''; ?>">
-                    <h3>Pending Events</h3>
-                </div>
-                <div class="modern-events-list">
-                    <?php foreach($pendingEvents as $ev): ?>
-                        <div class="event-strip-card">
-                            <div class="date-badge-box">
-                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
-                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php else: ?>
-                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php endif; ?>
-                            </div>
-                            <div class="strip-main-info">
-                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
-                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
-                            </div>
-                            <div class="strip-actions">
-                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-
-            <?php if (!empty($completedEvents)): ?>
-                <div class="section-flex-header <?php echo !empty($ongoingEvents) || !empty($upcomingEvents) || !empty($pendingEvents) ? 'cond-mt' : ''; ?>">
-                    <h3>Completed Events</h3>
-                </div>
-                <div class="modern-events-list">
-                    <?php foreach($completedEvents as $ev): ?>
-                        <div class="event-strip-card">
-                            <div class="date-badge-box">
-                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
-                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php else: ?>
-                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php endif; ?>
-                            </div>
-                            <div class="strip-main-info">
-                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
-                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
-                            </div>
-                            <div class="strip-actions">
-                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-
-            <?php if (!empty($cancelledEvents)): ?>
-                <div class="section-flex-header cond-mt">
-                    <h3>Cancelled Events</h3>
-                </div>
-                <div class="modern-events-list">
-                    <?php foreach($cancelledEvents as $ev): ?>
-                        <div class="event-strip-card">
-                            <div class="date-badge-box">
-                                <?php if (!empty($ev['eventEndDate']) && $ev['eventEndDate'] !== $ev['eventDate']): ?>
-                                    <span class="day-num"><?php echo date('j', strtotime($ev['eventDate'])) . '-' . date('j', strtotime($ev['eventEndDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php else: ?>
-                                    <span class="day-num"><?php echo date('d', strtotime($ev['eventDate'])); ?></span>
-                                    <span class="month-txt"><?php echo date('M', strtotime($ev['eventDate'])); ?></span>
-                                <?php endif; ?>
-                            </div>
-                            <div class="strip-main-info">
-                                <h4><?php echo htmlspecialchars($ev['eventTitle']); ?></h4>
-                                <p class="strip-meta">⏰ <?php echo date('h:iA', strtotime($ev['eventTime'])); ?><?php if (!empty($ev['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($ev['eventEndTime'])); ?><?php endif; ?> • 📍 <?php echo htmlspecialchars($ev['venue']); ?></p>
-                            </div>
-                            <div class="strip-actions">
-                                <a href="EditEvent.php?id=<?php echo $ev['eventID']; ?>" class="action-pill-btn">Details</a>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-
-            <?php if (empty($ongoingEvents) && empty($upcomingEvents) && empty($pendingEvents) && empty($completedEvents) && empty($cancelledEvents)): ?>
-                <div class="empty-state-canvas">
-                    <div class="empty-icon">📅</div>
-                    <h4>No active ongoing events</h4>
-                    <p>Schedule an interactive project or community workshop to gather members.</p>
-                </div>
-            <?php endif; ?>
-        </div>
-
         <div id="members-tab" class="tab-content-panel <?php echo $activeSettingsTab === 'members' ? 'active' : ''; ?>">
             <div class="section-flex-header">
                 <h3>Club Members (<?php echo $membersResult->num_rows; ?>)</h3>
-                <button type="button" class="btn-modern-secondary" onclick="openAddMemberModal()">+ Member</button>
+                <div class="member-header-actions">
+                    <?php if ($membersResult->num_rows > 0): ?>
+                        <button type="button" class="btn-modern-secondary" id="memberSelectModeBtn" onclick="toggleMemberSelectionMode()">Select</button>
+                        <button type="button" class="btn-modern-secondary bulk-remove-btn hidden" id="bulkRemoveMemberBtn" onclick="openBulkRemoveMembers()">Remove Member</button>
+                    <?php endif; ?>
+                    <button type="button" class="btn-modern-secondary" onclick="openAddMemberModal()">+ Member</button>
+                </div>
             </div>
 
             <?php if ($membersResult->num_rows > 0): ?>
@@ -623,6 +450,7 @@
                     <table class="premium-modern-table">
                         <thead>
                             <tr>
+                                <th class="member-select-col hidden"><input type="checkbox" id="selectAllMembers" onchange="toggleAllMembers(this)"></th>
                                 <th>No.</th>
                                 <th>Student ID</th>
                                 <th>Full Name</th>
@@ -634,6 +462,15 @@
                         <tbody>
                             <?php $i = 1; while($memb = $membersResult->fetch_assoc()): ?>
                                 <tr>
+                                    <td class="member-select-col hidden">
+                                        <input
+                                            type="checkbox"
+                                            class="member-select-checkbox"
+                                            value="<?php echo htmlspecialchars($memb['studentID']); ?>"
+                                            data-name="<?php echo htmlspecialchars($memb['name']); ?>"
+                                            onchange="syncMemberSelectionState()"
+                                        >
+                                    </td>
                                     <td><?php echo $i++; ?></td>
                                     <td><span class="id-tag"><?php echo htmlspecialchars($memb['studentID']); ?></span></td>
                                     <td class="user-cell-name"><strong><?php echo htmlspecialchars($memb['name']); ?></strong></td>
@@ -733,10 +570,10 @@
         <div class="modal-box" onclick="event.stopPropagation()">
             <button type="button" class="modal-close" onclick="closeRemoveMemberModal()">&times;</button>
             <h3>Remove Club Member</h3>
-            <p class="text-sm-muted mb-16">Write the reason for removing <strong id="removeMemberNameText">this member</strong>. The student will be notified with this reason.</p>
+            <p class="text-sm-muted mb-16">Write the reason for removing <strong id="removeMemberNameText">this member</strong>. Selected student(s) will be notified with this same reason.</p>
             <form method="POST">
                 <input type="hidden" name="remove_member" value="1">
-                <input type="hidden" name="student_id" id="removeMemberStudentID" value="">
+                <div id="removeMemberInputs"></div>
 
                 <label for="removeMemberReason" class="form-label-md">Reason</label>
                 <textarea name="remove_reason" id="removeMemberReason" class="form-textarea-lg" rows="4" required placeholder="e.g. No longer active, requested removal, no longer part of the club..."></textarea>
@@ -814,17 +651,101 @@
             }
         }
 
+        function setRemoveMemberInputs(studentIDs) {
+            const container = document.getElementById('removeMemberInputs');
+            container.innerHTML = '';
+            studentIDs.forEach(studentID => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'student_ids[]';
+                input.value = studentID;
+                container.appendChild(input);
+            });
+        }
+
         function openRemoveMemberModal(studentID, memberName) {
-            document.getElementById('removeMemberStudentID').value = studentID;
+            setRemoveMemberInputs([studentID]);
             document.getElementById('removeMemberNameText').textContent = memberName || 'this member';
             document.getElementById('removeMemberReason').value = '';
             document.getElementById('removeMemberModal').classList.add('active');
             document.getElementById('removeMemberReason').focus();
         }
 
+        let memberSelectionMode = false;
+
+        function getSelectedMemberCheckboxes() {
+            return Array.from(document.querySelectorAll('.member-select-checkbox:checked'));
+        }
+
+        function setMemberSelectionMode(enabled) {
+            memberSelectionMode = enabled;
+            document.querySelectorAll('.member-select-col').forEach(cell => {
+                cell.classList.toggle('hidden', !enabled);
+            });
+
+            const selectBtn = document.getElementById('memberSelectModeBtn');
+            const bulkBtn = document.getElementById('bulkRemoveMemberBtn');
+            const selectAll = document.getElementById('selectAllMembers');
+            if (selectBtn) {
+                selectBtn.textContent = enabled ? 'Cancel' : 'Select';
+            }
+            if (bulkBtn) {
+                bulkBtn.classList.toggle('hidden', !enabled);
+            }
+            if (!enabled) {
+                document.querySelectorAll('.member-select-checkbox').forEach(box => {
+                    box.checked = false;
+                });
+                if (selectAll) {
+                    selectAll.checked = false;
+                    selectAll.indeterminate = false;
+                }
+            }
+        }
+
+        function toggleMemberSelectionMode() {
+            setMemberSelectionMode(!memberSelectionMode);
+        }
+
+        function openBulkRemoveMembers() {
+            const selected = getSelectedMemberCheckboxes();
+            if (selected.length === 0) {
+                alert('Please select at least one member to remove.');
+                return;
+            }
+            const studentIDs = selected.map(box => box.value);
+            const names = selected.map(box => box.dataset.name || box.value);
+            setRemoveMemberInputs(studentIDs);
+            document.getElementById('removeMemberNameText').textContent = selected.length === 1 ? names[0] : selected.length + ' selected members';
+            document.getElementById('removeMemberReason').value = '';
+            document.getElementById('removeMemberModal').classList.add('active');
+            document.getElementById('removeMemberReason').focus();
+        }
+
+        function toggleAllMembers(source) {
+            document.querySelectorAll('.member-select-checkbox').forEach(box => {
+                box.checked = source.checked;
+            });
+            syncMemberSelectionState();
+        }
+
+        function syncMemberSelectionState() {
+            const boxes = Array.from(document.querySelectorAll('.member-select-checkbox'));
+            const selectAll = document.getElementById('selectAllMembers');
+            const bulkBtn = document.getElementById('bulkRemoveMemberBtn');
+            if (!selectAll || boxes.length === 0) return;
+            const checkedCount = boxes.filter(box => box.checked).length;
+            selectAll.checked = checkedCount === boxes.length;
+            selectAll.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+            if (bulkBtn) {
+                bulkBtn.classList.toggle('hidden', !memberSelectionMode);
+            }
+        }
+
         function closeRemoveMemberModal(e) {
             if (!e || e.target === document.getElementById('removeMemberModal')) {
                 document.getElementById('removeMemberModal').classList.remove('active');
+                document.getElementById('removeMemberInputs').innerHTML = '';
             }
         }
 

@@ -47,42 +47,42 @@
 
     function renderEventCard($row, $colors, $isRegistered) {
         $color = clubColor($row['clubName'] ?? '', $colors);
-        $eventDate = strtotime($row['eventDate']);
         $eventTime = strtotime($row['eventTime']);
         $eventEndTime = !empty($row['eventEndTime']) ? strtotime($row['eventEndTime']) : null;
+        $eventEndDate = $row['eventEndDate'] ?? null;
         ob_start();
         ?>
-        <article class="event-card student-dashboard-event-card"
+        <article class="event-card event-strip-card student-event-strip"
                  data-title="<?php echo strtolower(htmlspecialchars($row['eventTitle'])); ?>"
                  data-club="<?php echo strtolower(htmlspecialchars($row['clubName'])); ?>"
                  data-venue="<?php echo strtolower(htmlspecialchars($row['venue'])); ?>"
                  data-date="<?php echo $row['eventDate']; ?>"
                  data-registered="<?php echo $isRegistered ? '1' : '0'; ?>">
-            <div class="card-stripe" data-color="<?php echo $color; ?>"></div>
-            <?php if (!empty($row['eventImage'])): ?>
-                <img src="<?php echo htmlspecialchars($row['eventImage']); ?>" alt="Event image" class="img-event-card">
-            <?php endif; ?>
-            <div class="card-body">
-                <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="no-deco"><span class="tag" data-color="<?php echo $color; ?>"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
-                <h3><?php echo htmlspecialchars($row['eventTitle']); ?></h3>
-                <div class="event-meta">
-                    <div class="meta-row">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-                        <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?>
-                    </div>
-                    <div class="meta-row">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        <?php echo date('h:iA', $eventTime); ?><?php if ($eventEndTime): ?> — <?php echo date('h:iA', $eventEndTime); ?><?php endif; ?>
-                    </div>
-                    <div class="meta-row">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                        <?php echo htmlspecialchars($row['venue']); ?>
-                    </div>
-                </div>
-                <div class="card-divider"></div>
-                <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-primary">
-                    Details →
+            <div class="date-badge-box">
+                <?php if (!empty($eventEndDate) && $eventEndDate !== $row['eventDate']): ?>
+                    <span class="day-num"><?php echo date('j', strtotime($row['eventDate'])) . '-' . date('j', strtotime($eventEndDate)); ?></span>
+                    <span class="month-txt"><?php echo date('M', strtotime($row['eventDate'])); ?></span>
+                <?php else: ?>
+                    <span class="day-num"><?php echo date('d', strtotime($row['eventDate'])); ?></span>
+                    <span class="month-txt"><?php echo date('M', strtotime($row['eventDate'])); ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="strip-main-info">
+                <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="student-strip-club tag" data-color="<?php echo $color; ?>">
+                    <?php echo htmlspecialchars($row['clubName']); ?>
                 </a>
+                <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
+                <p class="strip-meta">
+                    <?php echo formatDateRange($row['eventDate'], $eventEndDate); ?> ·
+                    <?php echo date('h:iA', $eventTime); ?><?php if ($eventEndTime): ?> — <?php echo date('h:iA', $eventEndTime); ?><?php endif; ?> ·
+                    <?php echo htmlspecialchars($row['venue']); ?>
+                </p>
+            </div>
+            <div class="strip-actions student-strip-actions">
+                <?php if ($isRegistered): ?>
+                    <span class="student-registered-pill">Registered</span>
+                <?php endif; ?>
+                <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="action-pill-btn">Details</a>
             </div>
         </article>
         <?php
@@ -134,7 +134,7 @@
 
         <?php if ($ongoingResult->num_rows > 0): ?>
             <p class="section-label text-danger mt-24">Ongoing Events</p>
-            <section class="event-grid ongoing-section">
+            <section class="modern-events-list student-events-list ongoing-section">
                 <?php while ($row = $ongoingResult->fetch_assoc()): ?>
                     <?php echo renderEventCard($row, $colors, in_array($row['eventID'], $registeredIDs)); ?>
                 <?php endwhile; ?>
@@ -143,7 +143,7 @@
 
         <p class="section-label <?php echo $ongoingResult->num_rows > 0 ? 'mt-32' : 'mt-24'; ?>">Upcoming Events</p>
 
-        <section class="event-grid" id="eventGrid">
+        <section class="modern-events-list student-events-list" id="eventGrid">
             <?php
             if ($upcomingResult->num_rows > 0) {
                 while ($row = $upcomingResult->fetch_assoc()) {
@@ -187,9 +187,9 @@
             updateCount(visible);
         });
 
-        document.querySelectorAll('.filter-chip').forEach(btn => {
+        document.querySelectorAll('[data-filter]').forEach(btn => {
             btn.addEventListener('click', function () {
-                document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
                 this.classList.add('active');
                 document.getElementById('clubFilter').value = '';
                 applyFilters();
@@ -198,7 +198,7 @@
         });
 
         document.getElementById('clubFilter').addEventListener('change', function () {
-            document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
             applyFilters();
         });
 
@@ -211,7 +211,7 @@
         });
 
         function applyFilters() {
-            const activeChip = document.querySelector('.filter-chip.active');
+            const activeChip = document.querySelector('[data-filter].active');
             const filter = activeChip ? activeChip.dataset.filter : 'all';
             const now    = new Date();
             const weekMs = 7 * 24 * 60 * 60 * 1000;

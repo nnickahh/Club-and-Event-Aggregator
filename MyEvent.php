@@ -95,11 +95,12 @@
     $activeStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE r.studentID = ? AND e.status = 'approved' AND COALESCE(e.eventEndDate, e.eventDate) >= ? ORDER BY e.eventDate ASC");
     $activeStmt->bind_param("ss", $studentID, $today);
     $activeStmt->execute();
-    $activeEvents = $activeStmt->get_result();
+    $activeEvents = $activeStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $activeStmt->close();
 
     $pastStmt = $conn->prepare("
-        SELECT e.*, a.clubName, c.clubID, r.attendance_status, f.feedbackID, f.rating, f.`comment` AS feedbackComment
+        SELECT e.*, a.clubName, c.clubID, r.attendance_status, f.feedbackID, f.rating, f.`comment` AS feedbackComment,
+               COALESCE(pc.participantCount, 0) AS participantCount
         FROM events e
         JOIN registrations r ON e.eventID = r.eventID
         LEFT JOIN admins a ON e.adminID = a.adminID
@@ -107,20 +108,25 @@
             SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1
         )
         LEFT JOIN event_feedback f ON f.eventID = e.eventID AND f.studentID = r.studentID
+        LEFT JOIN (
+            SELECT eventID, COUNT(*) AS participantCount
+            FROM registrations
+            GROUP BY eventID
+        ) pc ON pc.eventID = e.eventID
         WHERE r.studentID = ?
           AND ((e.status = 'approved' AND COALESCE(e.eventEndDate, e.eventDate) < ?) OR e.status = 'ended')
         ORDER BY e.eventDate DESC
     ");
     $pastStmt->bind_param("ss", $studentID, $today);
     $pastStmt->execute();
-    $pastEvents = $pastStmt->get_result();
+    $pastEvents = $pastStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $pastStmt->close();
 
     // Club memberships
     $clubsStmt = $conn->prepare("SELECT a.clubName, a.clubEmail, cm.role, cm.joined_at, c.clubID, c.profilePic FROM club_members cm JOIN admins a ON cm.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE cm.studentID = ? ORDER BY a.clubName ASC");
     $clubsStmt->bind_param("s", $studentID);
     $clubsStmt->execute();
-    $clubsResult = $clubsStmt->get_result();
+    $clubsResult = $clubsStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $clubsStmt->close();
 
     $validTabs = ['events', 'history', 'clubs'];
@@ -155,26 +161,28 @@
         <?php endif; ?>
 
         <?php if ($activeTab === 'events'): ?>
-            <?php if ($activeEvents && $activeEvents->num_rows > 0): ?>
-                <?php while ($row = $activeEvents->fetch_assoc()): ?>
-                    <div class="horizontal-card">
+            <?php if (!empty($activeEvents)): ?>
+                <?php foreach ($activeEvents as $row): ?>
+                    <div class="horizontal-card active-event-card">
                         <div class="card-body">
-                            <span class="tag tag-confirmed">Event Confirmed</span>
-                            <?php if (!empty($row['clubName'])): ?>
-                            <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="no-deco"><span class="tag"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
-                            <?php endif; ?>
+                            <div class="active-event-head">
+                                <span class="tag tag-confirmed">Event Confirmed</span>
+                                <?php if (!empty($row['clubName'])): ?>
+                                    <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="active-event-club"><?php echo htmlspecialchars($row['clubName']); ?></a>
+                                <?php endif; ?>
+                            </div>
                             <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
-                            <div class="card-meta">
-                                <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?> |
-                                <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?> |
-                                <?php echo htmlspecialchars($row['venue']); ?>
+                            <div class="active-event-meta">
+                                <span>📅 <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?></span>
+                                <span>⏰ <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> - <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?></span>
+                                <span>📍 <?php echo htmlspecialchars($row['venue']); ?></span>
                             </div>
                         </div>
                         <div class="card-actions">
-                            <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline">Details →</a>
+                            <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline">View Details</a>
                         </div>
                     </div>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <div class="event-empty-box">
                     <p>No upcoming events. Register for an event to see it here.</p>
@@ -184,53 +192,80 @@
         <?php endif; ?>
 
         <?php if ($activeTab === 'history'): ?>
-            <?php if ($pastEvents && $pastEvents->num_rows > 0): ?>
-                <?php while ($row = $pastEvents->fetch_assoc()): ?>
-                    <div class="horizontal-card past-event-card">
-                        <div class="card-body">
-                            <span class="tag tag-confirmed">Past Event</span>
-                            <?php if (!empty($row['clubName'])): ?>
-                            <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="no-deco"><span class="tag"><?php echo htmlspecialchars($row['clubName']); ?></span></a>
-                            <?php endif; ?>
-                            <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
-                            <div class="card-meta">
-                                <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?> |
-                                <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?> |
-                                <?php echo htmlspecialchars($row['venue']); ?>
-                            </div>
-                            <div class="feedback-panel">
-                                <?php if (!empty($row['feedbackID'])): ?>
-                                    <div class="feedback-current">
-                                        <span class="feedback-stars"><?php echo str_repeat('★', (int)$row['rating']) . str_repeat('☆', 5 - (int)$row['rating']); ?></span>
-                                        <?php if (!empty($row['feedbackComment'])): ?>
-                                            <p><?php echo nl2br(htmlspecialchars($row['feedbackComment'])); ?></p>
-                                        <?php else: ?>
-                                            <p>No comment added.</p>
+            <?php if (!empty($pastEvents)): ?>
+                <div class="past-events-modern-list">
+                    <?php foreach ($pastEvents as $row): ?>
+                        <?php
+                            $isPresent = ($row['attendance_status'] ?? 'absent') === 'present';
+                            $hasFeedback = !empty($row['feedbackID']);
+                        ?>
+                        <article class="past-history-card">
+                            <div class="past-event-main">
+                                <div class="past-event-topline">
+                                    <div>
+                                        <h4><span>🎓</span><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
+                                        <?php if (!empty($row['clubName'])): ?>
+                                            <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="past-club-link"><?php echo htmlspecialchars($row['clubName']); ?></a>
                                         <?php endif; ?>
                                     </div>
-                                <?php endif; ?>
-                                <form method="POST" class="feedback-form">
-                                    <p class="feedback-form-title">Review this event</p>
-                                    <input type="hidden" name="event_id" value="<?php echo (int)$row['eventID']; ?>">
-                                    <div class="rating-row" aria-label="Star rating">
-                                        <?php for ($star = 5; $star >= 1; $star--): ?>
-                                            <input type="radio" id="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>" name="rating" value="<?php echo $star; ?>" <?php echo (int)($row['rating'] ?? 0) === $star ? 'checked' : ''; ?> required>
-                                            <label for="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>">★</label>
-                                        <?php endfor; ?>
-                                    </div>
-                                    <textarea name="comment" class="feedback-comment" rows="2" placeholder="Leave a quick comment..."><?php echo htmlspecialchars($row['feedbackComment'] ?? ''); ?></textarea>
-                                    <button type="submit" name="submit_feedback" class="btn-sm btn-sm-outline feedback-submit"><?php echo !empty($row['feedbackID']) ? 'Update Feedback' : 'Submit Feedback'; ?></button>
-                                </form>
+                                    <span class="completed-pill">✓ Completed</span>
+                                </div>
+
+                                <div class="past-event-meta-grid">
+                                    <span>📅 <?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?> • <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> - <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?></span>
+                                    <span>📍 <?php echo htmlspecialchars($row['venue']); ?></span>
+                                    <span class="<?php echo $isPresent ? 'attendance-present' : 'attendance-absent'; ?>"><?php echo $isPresent ? 'Present' : 'Absent'; ?></span>
+                                </div>
+
+                                <div class="past-achievement-row">
+                                    <span>🏅 Participated</span>
+                                </div>
+
+                                <div class="feedback-panel modern-feedback-panel">
+                                    <?php if ($hasFeedback): ?>
+                                        <div class="feedback-current">
+                                            <span class="feedback-stars"><?php echo str_repeat('★', (int)$row['rating']) . str_repeat('☆', 5 - (int)$row['rating']); ?></span>
+                                            <?php if (!empty($row['feedbackComment'])): ?>
+                                                <p><?php echo nl2br(htmlspecialchars($row['feedbackComment'])); ?></p>
+                                            <?php else: ?>
+                                                <p>No comment added.</p>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <form method="POST" class="feedback-form modern-feedback-form">
+                                        <input type="hidden" name="event_id" value="<?php echo (int)$row['eventID']; ?>">
+                                        <div class="feedback-rating-block">
+                                            <p class="feedback-form-title">Rate this event</p>
+                                            <div class="rating-row" aria-label="Star rating">
+                                                <?php for ($star = 5; $star >= 1; $star--): ?>
+                                                    <input type="radio" id="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>" name="rating" value="<?php echo $star; ?>" <?php echo (int)($row['rating'] ?? 0) === $star ? 'checked' : ''; ?> required>
+                                                    <label for="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>" title="<?php echo ['Poor', 'Fair', 'Average', 'Good', 'Excellent'][$star - 1]; ?>">★</label>
+                                                <?php endfor; ?>
+                                            </div>
+                                        </div>
+                                        <textarea name="comment" class="feedback-comment" rows="2" placeholder="Leave a quick comment..."><?php echo htmlspecialchars($row['feedbackComment'] ?? ''); ?></textarea>
+                                        <button type="submit" name="submit_feedback" class="btn-sm btn-sm-outline feedback-submit"><?php echo $hasFeedback ? 'Update Review' : 'Submit Review'; ?></button>
+                                    </form>
+                                </div>
                             </div>
-                        </div>
-                        <div class="card-actions">
-                            <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline">Details →</a>
-                            <?php if (($row['attendance_status'] ?? 'absent') === 'present'): ?>
-                                <a href="Certificate.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline certificate-btn">Certificate</a>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                <?php endwhile; ?>
+
+                            <div class="past-event-side">
+                                <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline">View Summary</a>
+                                <?php if ($isPresent): ?>
+                                    <a href="Certificate.php?id=<?php echo (int)$row['eventID']; ?>" class="certificate-ready-card">
+                                        <strong>🏆 Certificate Ready</strong>
+                                        <span>Download PDF</span>
+                                    </a>
+                                <?php else: ?>
+                                    <div class="certificate-locked-card">
+                                        <strong>Certificate Locked</strong>
+                                        <span>Attendance required</span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
             <?php else: ?>
                 <div class="event-empty-box">
                     <p>No past events yet.</p>
@@ -240,8 +275,8 @@
         <?php endif; ?>
 
         <?php if ($activeTab === 'clubs'): ?>
-            <?php if ($clubsResult && $clubsResult->num_rows > 0): ?>
-                <?php while ($club = $clubsResult->fetch_assoc()):
+            <?php if (!empty($clubsResult)): ?>
+                <?php foreach ($clubsResult as $club):
                     $clubName = htmlspecialchars($club['clubName']); ?>
                     <div class="horizontal-card">
                         <?php if (!empty($club['profilePic'])): ?>
@@ -258,7 +293,7 @@
                             <a href="ClubsDetails.php?id=<?php echo (int)$club['clubID']; ?>" class="btn-sm btn-sm-outline">Details →</a>
                         </div>
                     </div>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <div class="event-empty-box">
                     <p>You haven't joined any clubs yet.</p>

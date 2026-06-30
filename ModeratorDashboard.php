@@ -117,12 +117,13 @@
 	        }
 
 	        if ($moderatorID) {
-	            $modAnnStmt = $conn->prepare("SELECT announcementID, title, content, created_at FROM announcements WHERE moderatorID = ? AND DATE(created_at) = CURDATE() ORDER BY created_at DESC LIMIT 3");
-	            $modAnnStmt->bind_param("s", $moderatorID);
-	            $modAnnStmt->execute();
-	            $moderatorAnnouncements = $modAnnStmt->get_result()->fetch_all(MYSQLI_ASSOC);
-	            $modAnnStmt->close();
-	        }
+            $modAnnStmt = $conn->prepare("SELECT an.announcementID, an.title, an.content, an.created_at, e.eventTitle FROM announcements an LEFT JOIN events e ON an.eventID = e.eventID WHERE an.moderatorID = ? AND DATE(an.created_at) = CURDATE() ORDER BY an.created_at DESC LIMIT 3");
+            $modAnnStmt->bind_param("s", $moderatorID);
+            $modAnnStmt->execute();
+            $moderatorAnnouncements = $modAnnStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $modAnnStmt->close();
+        }
+
 	    } catch (mysqli_sql_exception $e) {
 	        error_log('ModeratorDashboard DB error: ' . $e->getMessage());
 	    }
@@ -157,9 +158,9 @@
                 <div class="announcement-admin-copy">
                     <p class="section-label">General Announcement</p>
                     <h3>Broadcast to Admins and Students</h3>
-                    <p>Post campus-wide notices that should appear as a popup for both club admins and students today.</p>
-                </div>
-                <form method="POST" class="announcement-admin-form">
+                <p>Post campus-wide notices that should appear as a popup for both club admins and students today.</p>
+            </div>
+            <form method="POST" class="announcement-admin-form">
                     <input type="text" name="moderator_announcement_title" class="form-input" maxlength="150" placeholder="Announcement title" required>
                     <textarea name="moderator_announcement_content" class="form-textarea" rows="5" placeholder="Write the announcement..." required></textarea>
                     <button type="submit" name="post_moderator_announcement" class="btn-primary-sm">Post General Announcement</button>
@@ -167,9 +168,9 @@
                 <?php if (!empty($moderatorAnnouncements)): ?>
                     <div class="announcement-admin-list">
                         <?php foreach ($moderatorAnnouncements as $announcement): ?>
-                            <article>
-                                <strong><?php echo htmlspecialchars($announcement['title']); ?></strong>
-                                <span class="announcement-event-chip">Moderator announcement</span>
+                        <article>
+                            <strong><?php echo htmlspecialchars($announcement['title']); ?></strong>
+                            <span class="announcement-event-chip"><?php echo !empty($announcement['eventTitle']) ? htmlspecialchars($announcement['eventTitle']) : 'Moderator announcement'; ?></span>
                                 <p><?php echo nl2br(htmlspecialchars($announcement['content'])); ?></p>
                                 <small><?php echo date('d M Y h:i A', strtotime($announcement['created_at'])); ?></small>
                             </article>

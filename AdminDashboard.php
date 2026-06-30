@@ -37,8 +37,17 @@
 
     session_write_close();
 
-    $eventOptionStmt = $conn->prepare("SELECT eventID, eventTitle, eventDate, status FROM events WHERE adminID = ? ORDER BY eventDate DESC LIMIT 30");
-    $eventOptionStmt->bind_param("s", $adminID);
+    $today = date('Y-m-d');
+    $eventOptionStmt = $conn->prepare("
+        SELECT eventID, eventTitle, eventDate, status
+        FROM events
+        WHERE adminID = ?
+          AND eventDate >= ?
+          AND status IN ('approved', 'cancelled')
+        ORDER BY eventDate ASC
+        LIMIT 30
+    ");
+    $eventOptionStmt->bind_param("ss", $adminID, $today);
     $eventOptionStmt->execute();
     $announcementEvents = $eventOptionStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $eventOptionStmt->close();
@@ -58,9 +67,10 @@
     $announcementStmt->close();
 
     $modBroadcastResult = $conn->query("
-        SELECT an.announcementID, an.title, an.content, an.created_at, m.name AS moderatorName
+        SELECT an.announcementID, an.title, an.content, an.created_at, m.name AS moderatorName, e.eventTitle
         FROM announcements an
         LEFT JOIN moderators m ON an.moderatorID = m.moderatorID
+        LEFT JOIN events e ON an.eventID = e.eventID
         WHERE an.created_by_role = 'moderator'
           AND DATE(an.created_at) = CURDATE()
         ORDER BY an.created_at DESC
@@ -385,7 +395,7 @@
             <div class="announcement-popup-list">
                 <?php foreach ($moderatorBroadcasts as $announcement): ?>
                     <article>
-                        <span class="announcement-event-chip">General announcement</span>
+                        <span class="announcement-event-chip"><?php echo !empty($announcement['eventTitle']) ? htmlspecialchars($announcement['eventTitle']) : 'General announcement'; ?></span>
                         <h4><?php echo htmlspecialchars($announcement['title']); ?></h4>
                         <p><?php echo nl2br(htmlspecialchars($announcement['content'])); ?></p>
                         <small>
