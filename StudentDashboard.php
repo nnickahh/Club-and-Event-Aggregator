@@ -128,9 +128,11 @@
     $colors = ['', 'green', 'blue', 'amber', 'purple'];
 
     $announcementResult = $conn->query("
-        SELECT an.announcementID, an.title, an.content, an.created_at, a.clubName, e.eventID, e.eventTitle
+        SELECT an.announcementID, an.title, an.content, an.created_at, an.created_by_role,
+               a.clubName, m.name AS moderatorName, e.eventID, e.eventTitle
         FROM announcements an
         LEFT JOIN admins a ON an.adminID = a.adminID
+        LEFT JOIN moderators m ON an.moderatorID = m.moderatorID
         LEFT JOIN events e ON an.eventID = e.eventID
         WHERE DATE(an.created_at) = CURDATE()
         ORDER BY an.created_at DESC
@@ -270,6 +272,11 @@
                 </div>
                 <div class="student-announcement-list">
                     <?php foreach ($announcements as $announcement): ?>
+                        <?php
+                            $announcementSource = ($announcement['created_by_role'] ?? 'admin') === 'moderator'
+                                ? (($announcement['moderatorName'] ?? '') ?: 'Moderator')
+                                : (($announcement['clubName'] ?? '') ?: 'Campus Admin');
+                        ?>
                         <article>
                             <div>
                                 <span class="announcement-event-chip"><?php echo !empty($announcement['eventTitle']) ? htmlspecialchars($announcement['eventTitle']) : 'General announcement'; ?></span>
@@ -277,7 +284,7 @@
                                 <p><?php echo nl2br(htmlspecialchars($announcement['content'])); ?></p>
                             </div>
                             <small>
-                                <?php echo htmlspecialchars($announcement['clubName'] ?? 'Campus Admin'); ?> ·
+                                <?php echo htmlspecialchars($announcementSource); ?> ·
                                 <?php echo date('d M Y', strtotime($announcement['created_at'])); ?>
                             </small>
                         </article>
@@ -361,12 +368,17 @@
                 </div>
                 <div class="announcement-popup-list">
                     <?php foreach ($announcements as $announcement): ?>
+                        <?php
+                            $announcementSource = ($announcement['created_by_role'] ?? 'admin') === 'moderator'
+                                ? (($announcement['moderatorName'] ?? '') ?: 'Moderator')
+                                : (($announcement['clubName'] ?? '') ?: 'Campus Admin');
+                        ?>
                         <article>
                             <span class="announcement-event-chip"><?php echo !empty($announcement['eventTitle']) ? htmlspecialchars($announcement['eventTitle']) : 'General announcement'; ?></span>
                             <h4><?php echo htmlspecialchars($announcement['title']); ?></h4>
                             <p><?php echo nl2br(htmlspecialchars($announcement['content'])); ?></p>
                             <small>
-                                <?php echo htmlspecialchars($announcement['clubName'] ?? 'Campus Admin'); ?> ·
+                                <?php echo htmlspecialchars($announcementSource); ?> ·
                                 <?php echo date('d M Y', strtotime($announcement['created_at'])); ?>
                             </small>
                         </article>

@@ -57,6 +57,18 @@
     $adminAnnouncements = $announcementStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $announcementStmt->close();
 
+    $modBroadcastResult = $conn->query("
+        SELECT an.announcementID, an.title, an.content, an.created_at, m.name AS moderatorName
+        FROM announcements an
+        LEFT JOIN moderators m ON an.moderatorID = m.moderatorID
+        WHERE an.created_by_role = 'moderator'
+          AND DATE(an.created_at) = CURDATE()
+        ORDER BY an.created_at DESC
+        LIMIT 3
+    ");
+    $moderatorBroadcasts = $modBroadcastResult ? $modBroadcastResult->fetch_all(MYSQLI_ASSOC) : [];
+    $adminAnnouncementReadKey = !empty($moderatorBroadcasts) ? 'admin_moderator_announcements_read_' . (int)$moderatorBroadcasts[0]['announcementID'] : '';
+
     $query = "SELECT * FROM events WHERE adminID = ? ORDER BY eventDate ASC";
     $stmt = $conn->prepare($query);
     $stmt->bind_param("s", $adminID); 
@@ -363,6 +375,31 @@
 
     </main>
 
+    <?php if (!empty($moderatorBroadcasts)): ?>
+    <div class="announcement-popup-overlay" id="adminAnnouncementPopup" data-read-key="<?php echo htmlspecialchars($adminAnnouncementReadKey); ?>">
+        <div class="announcement-popup-box" role="dialog" aria-modal="true" aria-labelledby="adminAnnouncementPopupTitle">
+            <div class="announcement-popup-head">
+                <span>Moderator Notice</span>
+                <h3 id="adminAnnouncementPopupTitle">Latest General Announcement</h3>
+            </div>
+            <div class="announcement-popup-list">
+                <?php foreach ($moderatorBroadcasts as $announcement): ?>
+                    <article>
+                        <span class="announcement-event-chip">General announcement</span>
+                        <h4><?php echo htmlspecialchars($announcement['title']); ?></h4>
+                        <p><?php echo nl2br(htmlspecialchars($announcement['content'])); ?></p>
+                        <small>
+                            <?php echo htmlspecialchars($announcement['moderatorName'] ?? 'Moderator'); ?> ·
+                            <?php echo date('d M Y', strtotime($announcement['created_at'])); ?>
+                        </small>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+            <button type="button" class="btn-primary-sm announcement-read-btn" onclick="markAdminAnnouncementsRead()">I have read</button>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div id="adminCancelModal" class="modal-overlay" onclick="closeAdminCancelModal(event)">
         <div class="modal-box" onclick="event.stopPropagation()">
             <button type="button" class="modal-close" onclick="closeAdminCancelModal()">&times;</button>
@@ -407,6 +444,24 @@
             if (!e || e.target === document.getElementById('adminCancelModal')) {
                 document.getElementById('adminCancelModal').classList.remove('active');
             }
+        }
+
+        const adminAnnouncementPopup = document.getElementById('adminAnnouncementPopup');
+        if (adminAnnouncementPopup) {
+            const readKey = adminAnnouncementPopup.dataset.readKey;
+            if (readKey && localStorage.getItem(readKey) !== '1') {
+                adminAnnouncementPopup.classList.add('open');
+                document.body.classList.add('modal-open');
+            }
+        }
+
+        function markAdminAnnouncementsRead() {
+            const popup = document.getElementById('adminAnnouncementPopup');
+            if (!popup) return;
+            const readKey = popup.dataset.readKey;
+            if (readKey) localStorage.setItem(readKey, '1');
+            popup.classList.remove('open');
+            document.body.classList.remove('modal-open');
         }
     </script>
 

@@ -388,15 +388,26 @@
     try {
         $conn->query("CREATE TABLE IF NOT EXISTS announcements (
             announcementID INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            adminID VARCHAR(20) NOT NULL,
+            adminID VARCHAR(20) DEFAULT NULL,
+            moderatorID VARCHAR(20) DEFAULT NULL,
+            created_by_role VARCHAR(20) DEFAULT 'admin',
             eventID INT UNSIGNED DEFAULT NULL,
             title VARCHAR(150) NOT NULL,
             content TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $conn->query("ALTER TABLE announcements MODIFY COLUMN adminID VARCHAR(20) DEFAULT NULL");
+        $check = $conn->query("SHOW COLUMNS FROM announcements LIKE 'moderatorID'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE announcements ADD COLUMN moderatorID VARCHAR(20) DEFAULT NULL AFTER adminID");
+        }
+        $check = $conn->query("SHOW COLUMNS FROM announcements LIKE 'created_by_role'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE announcements ADD COLUMN created_by_role VARCHAR(20) DEFAULT 'admin' AFTER moderatorID");
+        }
         $check = $conn->query("SHOW COLUMNS FROM announcements LIKE 'eventID'");
         if (!$check || $check->num_rows === 0) {
-            $conn->query("ALTER TABLE announcements ADD COLUMN eventID INT UNSIGNED DEFAULT NULL AFTER adminID");
+            $conn->query("ALTER TABLE announcements ADD COLUMN eventID INT UNSIGNED DEFAULT NULL AFTER created_by_role");
         }
     } catch (mysqli_sql_exception $e) {
         error_log('DB announcements table creation error: ' . $e->getMessage());

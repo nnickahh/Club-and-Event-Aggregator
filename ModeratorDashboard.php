@@ -6,6 +6,31 @@
         header("Location: ModeratorLogin.php");
         exit();
     }
+
+    $moderatorID = $_SESSION['moderator_id'] ?? null;
+    $moderatorName = $_SESSION['full_name'] ?? 'Moderator';
+    $moderatorAnnouncementMessage = $_SESSION['moderator_announcement_flash'] ?? '';
+    unset($_SESSION['moderator_announcement_flash']);
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_moderator_announcement'])) {
+        $announcementTitle = trim($_POST['moderator_announcement_title'] ?? '');
+        $announcementContent = trim($_POST['moderator_announcement_content'] ?? '');
+
+        if ($announcementTitle !== '' && $announcementContent !== '') {
+            $role = 'moderator';
+            $annStmt = $conn->prepare("INSERT INTO announcements (moderatorID, created_by_role, title, content) VALUES (?, ?, ?, ?)");
+            $annStmt->bind_param("ssss", $moderatorID, $role, $announcementTitle, $announcementContent);
+            $annStmt->execute();
+            $annStmt->close();
+            logModeratorActivity($conn, $moderatorID, $moderatorName, 'posted', 'announcement', null, $announcementTitle, $announcementContent);
+            $_SESSION['moderator_announcement_flash'] = 'Announcement posted to admins and students.';
+            header("Location: ModeratorDashboard.php#moderator-announcements");
+            exit();
+        }
+
+        $moderatorAnnouncementMessage = 'Please fill in both announcement title and content.';
+    }
+
     session_write_close();
 
     $currentPage = 'home';
@@ -18,6 +43,7 @@
     $recentActivity = [];
     $pendingReviewQueue = [];
     $moderatorLogs = [];
+    $moderatorAnnouncements = [];
 
     try {
         $result = $conn->query("SELECT COUNT(*) AS cnt FROM events");
@@ -89,6 +115,14 @@
 	        if ($logResult) {
 	            $moderatorLogs = $logResult->fetch_all(MYSQLI_ASSOC);
 	        }
+
+	        if ($moderatorID) {
+	            $modAnnStmt = $conn->prepare("SELECT announcementID, title, content, created_at FROM announcements WHERE moderatorID = ? AND DATE(created_at) = CURDATE() ORDER BY created_at DESC LIMIT 3");
+	            $modAnnStmt->bind_param("s", $moderatorID);
+	            $modAnnStmt->execute();
+	            $moderatorAnnouncements = $modAnnStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+	            $modAnnStmt->close();
+	        }
 	    } catch (mysqli_sql_exception $e) {
 	        error_log('ModeratorDashboard DB error: ' . $e->getMessage());
 	    }
@@ -114,93 +148,88 @@
             </div>
         </div>
 
-        <div class="mod-stats-grid">
-            <div class="mod-stat-card">
-                <a href="ModeratorEvents.php?tab=upcoming" class="stat-link">
-                    <div class="mod-stat-icon blue">
-                        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-                    </div>
-                    <div>
-                        <div class="mod-stat-num"><?php echo $totalEvents; ?></div>
-                        <div class="mod-stat-lbl">Total Events</div>
-                    </div>
-                </a>
-            </div>
-            <div class="mod-stat-card">
-                <a href="ModeratorEvents.php?tab=pending" class="stat-link">
-                    <div class="mod-stat-icon amber">
-                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
-                    </div>
-                    <div>
-                        <div class="mod-stat-num"><?php echo $pendingEvents; ?></div>
-                        <div class="mod-stat-lbl">Pending Events</div>
-                    </div>
-                </a>
-            </div>
-            <div class="mod-stat-card">
-                <a href="ModeratorClubs.php?tab=pending" class="stat-link">
-                    <div class="mod-stat-icon purple">
-                        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                    </div>
-                    <div>
-                        <div class="mod-stat-num"><?php echo $pendingClubs; ?></div>
-                        <div class="mod-stat-lbl">Pending Clubs</div>
-                    </div>
-                </a>
-            </div>
-            <div class="mod-stat-card">
-                <a href="ModeratorClubs.php?tab=approved" class="stat-link">
-                    <div class="mod-stat-icon green">
-                        <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
-                    </div>
-                    <div>
-                        <div class="mod-stat-num"><?php echo $activeClubs; ?></div>
-                        <div class="mod-stat-lbl">Active Clubs</div>
-                    </div>
-                </a>
-            </div>
-	        </div>
+        <?php if ($moderatorAnnouncementMessage): ?>
+            <div class="msg-banner feedback-success-banner"><?php echo htmlspecialchars($moderatorAnnouncementMessage); ?></div>
+        <?php endif; ?>
 
-	        <div class="mod-dashboard-two-col">
-	            <section class="mod-review-panel">
-	                <div class="mod-panel-head">
-	                    <div>
-	                        <p class="section-label">Pending Review Queue</p>
-	                        <h3>Items Requiring Action</h3>
-	                    </div>
-	                    <span><?php echo count($pendingReviewQueue); ?></span>
-	                </div>
-	                <?php if (!empty($pendingReviewQueue)): ?>
-	                    <div class="mod-review-list">
-	                        <?php foreach ($pendingReviewQueue as $item): ?>
-	                            <?php
-	                                $isEventQueue = ($item['queue_type'] ?? '') === 'event';
-	                                $queueTarget = $isEventQueue
-	                                    ? 'EventDetailsModerator.php?id=' . (int)$item['eventID']
-	                                    : 'ModeratorClubs.php?tab=pending';
-	                                $queueTitle = $isEventQueue ? ($item['eventTitle'] ?? 'Pending event') : ($item['clubName'] ?? 'Pending club');
-	                                $queueMeta = $isEventQueue
-	                                    ? (($item['club_name'] ?? 'Unknown club') . ' · ' . date('d M Y', strtotime($item['eventDate'])))
-	                                    : (($item['name'] ?? 'Club admin') . ' · ' . ($item['clubEmail'] ?? ''));
-	                            ?>
-	                            <a href="<?php echo htmlspecialchars($queueTarget); ?>" class="mod-review-item">
-	                                <span class="mod-review-type <?php echo $isEventQueue ? 'event' : 'club'; ?>"><?php echo $isEventQueue ? 'Event' : 'Club'; ?></span>
-	                                <strong><?php echo htmlspecialchars($queueTitle); ?></strong>
-	                                <small><?php echo htmlspecialchars($queueMeta); ?></small>
-	                            </a>
-	                        <?php endforeach; ?>
-	                    </div>
-	                <?php else: ?>
-	                    <div class="event-empty-box compact-empty-box">
-	                        <p>No pending review items.</p>
-	                    </div>
-	                <?php endif; ?>
-	            </section>
+        <div class="moderator-dashboard-top">
+            <section class="announcement-admin-panel moderator-announcement-panel" id="moderator-announcements">
+                <div class="announcement-admin-copy">
+                    <p class="section-label">General Announcement</p>
+                    <h3>Broadcast to Admins and Students</h3>
+                    <p>Post campus-wide notices that should appear as a popup for both club admins and students today.</p>
+                </div>
+                <form method="POST" class="announcement-admin-form">
+                    <input type="text" name="moderator_announcement_title" class="form-input" maxlength="150" placeholder="Announcement title" required>
+                    <textarea name="moderator_announcement_content" class="form-textarea" rows="5" placeholder="Write the announcement..." required></textarea>
+                    <button type="submit" name="post_moderator_announcement" class="btn-primary-sm">Post General Announcement</button>
+                </form>
+                <?php if (!empty($moderatorAnnouncements)): ?>
+                    <div class="announcement-admin-list">
+                        <?php foreach ($moderatorAnnouncements as $announcement): ?>
+                            <article>
+                                <strong><?php echo htmlspecialchars($announcement['title']); ?></strong>
+                                <span class="announcement-event-chip">Moderator announcement</span>
+                                <p><?php echo nl2br(htmlspecialchars($announcement['content'])); ?></p>
+                                <small><?php echo date('d M Y h:i A', strtotime($announcement['created_at'])); ?></small>
+                            </article>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </section>
 
-	            <section class="mod-review-panel">
-	                <div class="mod-panel-head">
-	                    <div>
-	                        <p class="section-label">Activity Log</p>
+            <div class="moderator-stats-stack">
+            <div class="mod-stats-grid moderator-stats-vertical">
+                <div class="mod-stat-card">
+                    <a href="ModeratorEvents.php?tab=pending" class="stat-link">
+                        <div class="mod-stat-icon amber">
+                            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                        </div>
+                        <div>
+                            <div class="mod-stat-num"><?php echo $pendingEvents; ?></div>
+                            <div class="mod-stat-lbl">Event Approval Queue</div>
+                        </div>
+                    </a>
+                </div>
+                <div class="mod-stat-card">
+                    <a href="ModeratorClubs.php?tab=pending" class="stat-link">
+                        <div class="mod-stat-icon purple">
+                            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                        </div>
+                        <div>
+                            <div class="mod-stat-num"><?php echo $pendingClubs; ?></div>
+                            <div class="mod-stat-lbl">Club Approval Queue</div>
+                        </div>
+                    </a>
+                </div>
+                <div class="mod-stat-card">
+                    <a href="ModeratorEvents.php?tab=upcoming" class="stat-link">
+                        <div class="mod-stat-icon blue">
+                            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+                        </div>
+                        <div>
+                            <div class="mod-stat-num"><?php echo $totalEvents; ?></div>
+                            <div class="mod-stat-lbl">Total Events</div>
+                        </div>
+                    </a>
+                </div>
+                <div class="mod-stat-card">
+                    <a href="ModeratorClubs.php?tab=approved" class="stat-link">
+                        <div class="mod-stat-icon green">
+                            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+                        </div>
+                        <div>
+                            <div class="mod-stat-num"><?php echo $activeClubs; ?></div>
+                            <div class="mod-stat-lbl">Active Clubs</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+		            <section class="mod-review-panel moderator-actions-panel">
+		                <div class="mod-panel-head">
+		                    <div>
+		                        <p class="section-label">Activity Log</p>
 	                        <h3>Recent Moderator Actions</h3>
 	                    </div>
 	                </div>
@@ -222,10 +251,11 @@
 	                <?php else: ?>
 	                    <div class="event-empty-box compact-empty-box">
 	                        <p>No moderator actions logged yet.</p>
-	                    </div>
-	                <?php endif; ?>
-	            </section>
-	        </div>
+		                    </div>
+		                <?php endif; ?>
+		            </section>
+            </div>
+        </div>
 
 	        <div class="section-label">Recent Activity</div>
 
@@ -235,10 +265,12 @@
                 <input type="text" id="dashboardActivitySearch" class="search-bar" placeholder="Search events or clubs...">
             </div>
             <div class="reg-filter-group">
-                <button type="button" class="filter-chip active" data-activitystatus="all">All</button>
-                <button type="button" class="filter-chip" data-activitystatus="pending">Pending</button>
-                <button type="button" class="filter-chip" data-activitystatus="approved">Approved</button>
-                <button type="button" class="filter-chip" data-activitystatus="declined">Declined</button>
+	                <button type="button" class="filter-chip active" data-activityfilter="all">All</button>
+	                <button type="button" class="filter-chip" data-activityfilter="events">Events</button>
+	                <button type="button" class="filter-chip" data-activityfilter="clubs">Clubs</button>
+	                <button type="button" class="filter-chip" data-activityfilter="pending">Pending</button>
+	                <button type="button" class="filter-chip" data-activityfilter="approved">Approved</button>
+	                <button type="button" class="filter-chip" data-activityfilter="declined">Declined</button>
             </div>
         </div>
 
@@ -258,10 +290,11 @@
                         $activitySearchTitle = strtolower(($act['eventTitle'] ?? '') . ' ' . ($act['applicant_name'] ?? '') . ' ' . ($act['clubEmail'] ?? ''));
                     ?>
                     <div class="mod-activity-item"
-                         onclick="window.location.href='<?php echo htmlspecialchars($activityTarget, ENT_QUOTES); ?>'"
-                         data-title="<?php echo htmlspecialchars($activitySearchTitle, ENT_QUOTES); ?>"
-                         data-club="<?php echo htmlspecialchars(strtolower($act['club_name'] ?? ''), ENT_QUOTES); ?>"
-                         data-status="<?php echo htmlspecialchars($activityStatus, ENT_QUOTES); ?>">
+	                         onclick="window.location.href='<?php echo htmlspecialchars($activityTarget, ENT_QUOTES); ?>'"
+	                         data-title="<?php echo htmlspecialchars($activitySearchTitle, ENT_QUOTES); ?>"
+	                         data-club="<?php echo htmlspecialchars(strtolower($act['club_name'] ?? ''), ENT_QUOTES); ?>"
+	                         data-type="<?php echo htmlspecialchars($activityType, ENT_QUOTES); ?>"
+	                         data-status="<?php echo htmlspecialchars($activityStatus, ENT_QUOTES); ?>">
                         <span class="mod-activity-dot"></span>
                         <span>
                             <span class="act-title"><?php echo htmlspecialchars($act['eventTitle']); ?></span>
@@ -309,29 +342,31 @@
 
         function applyDashboardActivityFilters() {
             const q = dashboardActivitySearch.value.toLowerCase().trim();
-            const activeStatus = document.querySelector('[data-activitystatus].active');
-            const status = activeStatus ? activeStatus.dataset.activitystatus : 'all';
-            let visible = 0;
-
-            dashboardActivityItems.forEach(item => {
-                let show = true;
-                if (q && !item.dataset.title.includes(q) && !item.dataset.club.includes(q)) show = false;
-                if (status !== 'all' && item.dataset.status !== status) show = false;
-                item.style.display = show ? '' : 'none';
-                if (show) visible++;
-            });
+	            const activeFilter = document.querySelector('[data-activityfilter].active');
+	            const filter = activeFilter ? activeFilter.dataset.activityfilter : 'all';
+	            let visible = 0;
+	
+	            dashboardActivityItems.forEach(item => {
+	                let show = true;
+	                if (q && !item.dataset.title.includes(q) && !item.dataset.club.includes(q)) show = false;
+	                if (filter === 'events' && item.dataset.type !== 'event') show = false;
+	                if (filter === 'clubs' && item.dataset.type !== 'club') show = false;
+	                if (['pending', 'approved', 'declined'].includes(filter) && item.dataset.status !== filter) show = false;
+	                item.style.display = show ? '' : 'none';
+	                if (show) visible++;
+	            });
 
             dashboardActivityCount.textContent = visible + ' activit' + (visible === 1 ? 'y' : 'ies') + ' found';
             dashboardActivityNoResults.style.display = visible === 0 && dashboardActivityItems.length > 0 ? '' : 'none';
         }
 
         dashboardActivitySearch.addEventListener('input', applyDashboardActivityFilters);
-        document.querySelectorAll('[data-activitystatus]').forEach(btn => {
-            btn.addEventListener('click', function () {
-                document.querySelectorAll('[data-activitystatus]').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                applyDashboardActivityFilters();
-            });
+	        document.querySelectorAll('[data-activityfilter]').forEach(btn => {
+	            btn.addEventListener('click', function () {
+	                document.querySelectorAll('[data-activityfilter]').forEach(b => b.classList.remove('active'));
+	                this.classList.add('active');
+	                applyDashboardActivityFilters();
+	            });
         });
     </script>
 </body>

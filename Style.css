@@ -2937,6 +2937,66 @@ body.is-editing-mode .hide-on-edit {
 .mod-stat-lbl { font-size: 12px; color: var(--ink-3); margin-top: 2px; font-weight: 500; }
 .stat-link { text-decoration: none; color: inherit; display: flex; align-items: center; gap: 16px; width: 100%; }
 
+.moderator-dashboard-top {
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) minmax(360px, 0.78fr);
+    gap:20px;
+    align-items:start;
+    margin-bottom:48px;
+}
+.moderator-dashboard-top .moderator-announcement-panel {
+    margin-bottom:0;
+    min-height:0;
+    padding:18px;
+    max-height:370px;
+    overflow:auto;
+}
+.moderator-dashboard-top .announcement-admin-panel {
+    grid-template-columns:1fr;
+}
+.moderator-dashboard-top .announcement-admin-copy p:not(.section-label) {
+    max-width:560px;
+}
+.moderator-dashboard-top .announcement-admin-form textarea {
+    min-height:120px;
+}
+.moderator-stats-vertical {
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:12px;
+    margin-bottom:0;
+    align-self:start;
+}
+.moderator-stats-stack {
+    display:grid;
+    gap:16px;
+    align-self:start;
+}
+.moderator-stats-vertical .mod-stat-card {
+    min-height:78px;
+    padding:11px 12px;
+}
+.moderator-stats-vertical .stat-link {
+    align-items:flex-start;
+    gap:10px;
+}
+.moderator-stats-vertical .mod-stat-icon {
+    width:36px;
+    height:36px;
+}
+.moderator-stats-vertical .mod-stat-num {
+    font-size:24px;
+}
+.moderator-stats-vertical .mod-stat-lbl {
+    font-size:11px;
+    line-height:1.25;
+}
+.moderator-actions-panel {
+    padding:12px 14px;
+}
+.moderator-actions-panel .mod-panel-head {
+    margin-bottom:6px;
+}
+
 /* ── MODERATOR ACTIVITY LIST ───────────────────────── */
 .mod-activity-list {
     background: var(--surface);
@@ -3053,35 +3113,35 @@ body.is-editing-mode .hide-on-edit {
 .mod-log-item {
     display:grid;
     grid-template-columns:auto 1fr;
-    gap:10px;
-    padding:12px 0;
+    gap:8px;
+    padding:8px 0;
     border-bottom:1px solid var(--border);
 }
 .mod-log-item:last-child {
     border-bottom:none;
 }
 .mod-log-action {
-    padding:4px 8px;
+    padding:3px 7px;
     border-radius:999px;
     background:var(--green-bg);
     color:var(--green);
-    font-size:11px;
+    font-size:10px;
     font-weight:800;
     height:max-content;
 }
 .mod-log-item strong {
     display:block;
     color:var(--ink);
-    font-size:14px;
+    font-size:13px;
 }
 .mod-log-item small {
     color:var(--ink-3);
-    font-size:11px;
+    font-size:10.5px;
 }
 .mod-log-item p {
-    margin:6px 0 0;
+    margin:4px 0 0;
     color:var(--ink-2);
-    font-size:12px;
+    font-size:11.5px;
     line-height:1.45;
 }
 .compact-empty-box {
@@ -3126,6 +3186,9 @@ body.is-editing-mode .hide-on-edit {
 }
 
 @media (max-width: 900px) {
+    .moderator-dashboard-top {
+        grid-template-columns:1fr;
+    }
     .mod-dashboard-two-col {
         grid-template-columns:1fr;
     }
@@ -3554,8 +3617,8 @@ body.is-editing-mode .hide-on-edit {
 }
 
 .admin-dashboard-shell .dashboard-header {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 24px;
     padding: 26px;
@@ -3565,6 +3628,10 @@ body.is-editing-mode .hide-on-edit {
     border-left: 6px solid var(--red);
     border-radius: var(--radius-lg);
     box-shadow: 0 14px 36px rgba(237, 28, 36, 0.08);
+}
+
+.admin-hero-copy {
+    min-width: 0;
 }
 
 .admin-dashboard-shell .admin-kicker {
@@ -3602,6 +3669,7 @@ body.is-editing-mode .hide-on-edit {
 .admin-hero-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 10px;
     flex-shrink: 0;
 }
@@ -3824,24 +3892,30 @@ body.is-editing-mode .hide-on-edit {
     }
 
     .admin-hero-actions {
-        width: 100%;
+        justify-self: end;
     }
 }
 
 @media (max-width: 720px) {
     .admin-dashboard-shell .dashboard-header {
-        align-items: stretch;
-        flex-direction: column;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        padding: 20px;
     }
 
     .admin-hero-actions {
         flex-direction: column;
-        align-items: stretch;
+        align-items: flex-end;
+        justify-content: center;
+        justify-self: end;
     }
 
     .admin-dashboard-shell .dashboard-header .btn-primary,
     .admin-dashboard-shell .dashboard-header .btn-outline {
-        width: 100%;
+        width: auto;
+        min-width: 140px;
+        padding: 10px 14px;
     }
 
     .admin-status-strip {
@@ -4292,6 +4366,10 @@ body.is-editing-mode .hide-on-edit {
     grid-template-columns:minmax(220px, 0.8fr) minmax(280px, 1.2fr);
     gap:20px;
     align-items:start;
+}
+.moderator-announcement-panel {
+    border-color:#bfdbfe;
+    background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
 }
 .announcement-admin-copy h3,
 .student-announcement-heading strong {
