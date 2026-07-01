@@ -126,6 +126,24 @@ input:focus {
     border-color: #ED1C24; 
 }
 
+.form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    margin-bottom: 20px;
+    background: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    appearance: auto;
+}
+
+.form-group select:focus {
+    outline: none;
+    border-color: #ED1C24;
+}
+
 .radio {
     width: auto;
     margin-bottom: 0;
@@ -2672,6 +2690,24 @@ body.is-editing-mode .show-on-edit input[type="file"] {
     background:#fff5f5;
 }
 
+.edit-mode-col {
+    transition: opacity 0.15s;
+}
+
+.role-set-btn {
+    padding:5px 12px;
+    border:1px solid #d1d5db;
+    border-radius:6px;
+    font-size:12px;
+    font-weight:600;
+    background:#f9fafb;
+    color:#374151;
+    cursor:pointer;
+}
+.role-set-btn:hover {
+    background:#e5e7eb;
+}
+
 .bulk-remove-btn:hover {
     background:#fee2e2;
 }
@@ -3878,6 +3914,8 @@ body.is-editing-mode .hide-on-edit {
 .btn-outline-danger { padding:6px 14px; font-size:12px; font-weight:600; border-radius:20px; border:1px solid #fecaca; background:#fef2f2; color:#dc2626; cursor:pointer; }
 .btn-outline-secondary { padding:6px 16px; border:1px solid #e2e8f0; border-radius:20px; font-size:12px; font-weight:500; background:#fff; color:#64748b; cursor:pointer; }
 .btn-outline-secondary-hover { padding:6px 16px; border:1px solid #e2e8f0; border-radius:20px; font-size:12px; font-weight:500; background:#fff; color:#64748b; cursor:pointer; transition:all 0.2s; }
+.btn-danger-outline { padding:10px 24px; border:1.5px solid #fca5a5; border-radius:var(--radius-md); font-size:14px; font-weight:600; background:#fef2f2; color:#dc2626; cursor:pointer; transition:all 0.2s; margin-top:8px; }
+.btn-danger-outline:hover { background:#dc2626; color:#fff; border-color:#dc2626; }
 .btn-join { padding:6px 20px; border:none; border-radius:20px; font-size:13px; font-weight:600; background:var(--red,#dc2626); color:#fff; cursor:pointer; transition:opacity 0.2s; }
 .btn-decline-outline { padding:8px 20px; background:#fff; color:var(--red); border:1.5px solid var(--red); border-radius:var(--radius-md); font-size:13px; font-weight:600; cursor:pointer; }
 .btn-pad-sm { padding:8px 20px; }
@@ -4301,7 +4339,8 @@ body.is-editing-mode .hide-on-edit {
 .text-muted-link { color:var(--red,#ED1C24); text-decoration:none; font-weight:600; }
 
 /* ── Notification dropdown ── */
-.notif-link { font-size:12px; white-space:normal; line-height:1.4; padding:10px 14px; border-bottom:1px solid #f1f5f9; text-decoration:none; display:block; word-break:break-word; overflow-wrap:break-word; max-width:100%; box-sizing:border-box; }
+.notif-link { font-size:12px; white-space:normal; line-height:1.4; padding:10px 14px; border-bottom:1px solid #f1f5f9; text-decoration:none; display:block; word-break:break-word; overflow-wrap:break-word; max-width:100%; box-sizing:border-box; cursor:pointer; position:relative; }
+.notif-link:hover { background:#f8fafc; }
 .notif-link-unread { position:relative; padding-right:30px; }
 .notif-dot { position:absolute; right:13px; top:50%; transform:translateY(-50%); width:7px; height:7px; border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,0.95); }
 .notif-dot-blue { background:#2563eb; }
@@ -4312,6 +4351,8 @@ body.is-editing-mode .hide-on-edit {
 .notif-sep { border:0; border-top:1px solid var(--border,#e2e8f0); margin:4px 0; }
 .notif-time { color:#94a3b8; }
 .notif-sup { color:var(--red); font-weight:700; }
+.notif-dismiss { position:absolute; top:2px; right:4px; width:18px; height:18px; line-height:18px; text-align:center; font-size:14px; font-weight:700; color:#94a3b8; cursor:pointer; border-radius:50%; z-index:2; }
+.notif-dismiss:hover { background:#e2e8f0; color:#475569; }
 
 /* ── REGISTRATION DETAILS MODAL ────────────────────── */
 .modal-overlay {

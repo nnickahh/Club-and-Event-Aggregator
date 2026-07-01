@@ -44,11 +44,12 @@
                             else { $notifTarget = 'ClubSettings.php'; }
                             $notifHref = 'mark_notification_read.php?type=admin&id=' . (int)$n['id'] . '&redirect=' . urlencode($notifTarget);
                         ?>
-                        <a href="<?php echo htmlspecialchars($notifHref); ?>" class="notif-link <?php echo empty($n['is_read']) ? 'notif-link-unread' : ''; ?>">
+                        <div class="notif-link <?php echo empty($n['is_read']) ? 'notif-link-unread' : ''; ?>" onclick="window.location.href='<?php echo htmlspecialchars($notifHref); ?>'">
                             <?php if (empty($n['is_read'])): ?><span class="notif-dot notif-dot-red"></span><?php endif; ?>
                             <span class="notif-message-text"><?php echo htmlspecialchars($n['message']); ?></span>
                             <br><small class="notif-time"><?php echo date('d M h:i A', strtotime($n['created_at'])); ?></small>
-                        </a>
+                            <span class="notif-dismiss" onclick="event.stopPropagation(); dismissNotification(<?php echo (int)$n['id']; ?>, 'admin');">&times;</span>
+                        </div>
                     <?php endforeach; ?>
                     <a href="clear_notifications.php" class="clear-notif" onclick="return confirm('Remove all notifications from the list?');">Clear All</a>
                 <?php else: ?>
@@ -60,4 +61,13 @@
             </div>
         </div>
     </div>
+<script>
+function dismissNotification(id, type) {
+    fetch('dismiss_notification.php?type=' + type + '&id=' + id)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) location.reload();
+        });
+}
+</script>
 </nav>

@@ -92,6 +92,12 @@
             <a href="AdminLogin.php" class="tab-btn active">Admin</a>
         </div>
         
+        <?php if (isset($_GET['deleted']) && $_GET['deleted'] === '1'): ?>
+            <div class="msg-banner" style="background:var(--green-bg);color:var(--green);border:1px solid rgba(45,125,70,0.2);padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+                Your club has been deleted. If this was a mistake, please contact the moderator.
+            </div>
+        <?php endif; ?>
+
         <?php echo $message; ?>
 
         <form action="AdminLogin.php" method="POST">

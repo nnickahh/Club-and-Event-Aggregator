@@ -21,6 +21,8 @@
         $club_email = trim($_POST["club_email"]);
         $password = $_POST["password"];
         $confirm_password = $_POST["confirm_password"];
+        $security_question = trim($_POST['security_question'] ?? '');
+        $security_answer = trim($_POST['security_answer'] ?? '');
 
         // 1. Password Validation (Matches Literature Review Sec 2.6)
         $uppercase = preg_match('@[A-Z]@', $password);
@@ -36,6 +38,9 @@
         } 
         elseif ($password !== $confirm_password) {
             $message = "<p class='msg-error'>Passwords do not match!</p>";
+        }
+        elseif (!$security_question || !$security_answer) {
+            $message = "<p class='msg-error'>Please select a security question and provide an answer.</p>";
         }
         else {
             // 2. Check duplicate values separately so the user knows what to fix.
@@ -76,14 +81,15 @@
             } else {
                 // 3. Hash the password using Bcrypt
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                $hashed_answer = password_hash($security_answer, PASSWORD_DEFAULT);
                 
                 // 4. Insert into the 'admins' table
-                // Note: status is passed as a variable to match the 6 's' types in bind_param
+                // Note: status is passed as a variable to match the 8 's' types in bind_param
                 $status = 'pending';
-                $insert_stmt = $conn->prepare("INSERT INTO admins (name, adminID, clubName, clubEmail, password, status) VALUES (?, ?, ?, ?, ?, ?)");
+                $insert_stmt = $conn->prepare("INSERT INTO admins (name, adminID, clubName, clubEmail, password, security_question, security_answer, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 
                 if ($insert_stmt) {
-                    $insert_stmt->bind_param("ssssss", $fullname, $admin_id, $club_name, $club_email, $hashed_password, $status);
+                    $insert_stmt->bind_param("ssssssss", $fullname, $admin_id, $club_name, $club_email, $hashed_password, $security_question, $hashed_answer, $status);
                     
                     if ($insert_stmt->execute()) {
                         // Notify moderators
@@ -198,6 +204,24 @@
                         <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2z"/>
                     </svg>
                 </div>
+            </div>
+
+            <div class="form-group">
+                <label>Security Question :</label>
+                <select name="security_question" required>
+                    <option value="" disabled selected>Select your security question</option>
+                    <option value="What was the name of your first school?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === 'What was the name of your first school?') ? 'selected' : ''; ?>>What was the name of your first school?</option>
+                    <option value="What is your pet's name?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === "What is your pet's name?") ? 'selected' : ''; ?>>What is your pet's name?</option>
+                    <option value="What city were you born in?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === 'What city were you born in?') ? 'selected' : ''; ?>>What city were you born in?</option>
+                    <option value="What is your mother's maiden name?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === "What is your mother's maiden name?") ? 'selected' : ''; ?>>What is your mother's maiden name?</option>
+                    <option value="What was your first car?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === 'What was your first car?') ? 'selected' : ''; ?>>What was your first car?</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Your Answer :</label>
+                <input type="text" name="security_answer" required placeholder="Your answer"
+                    value="<?php echo isset($_POST['security_answer']) ? htmlspecialchars($_POST['security_answer']) : ''; ?>">
             </div>
             
             <button type="submit" name="submit" class="btn-outline">Submit Application</button>

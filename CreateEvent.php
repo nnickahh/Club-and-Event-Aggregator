@@ -278,7 +278,7 @@
                     </div>
                 </div>
 
-                <button type="submit" name="submit" class="btn-primary mt-16 w-100">Submit for Approval</button>
+                <button type="submit" name="submit" class="btn-primary mt-16 w-100" onclick="return confirm('Are you sure you want to submit this event for moderator approval?')">Submit for Approval</button>
 
                 <div class="text-center text-sm-muted" style="margin-top:20px;">
                     Changed your mind? <a href="AdminDashboard.php" class="text-muted-link">Back to Dashboard</a>

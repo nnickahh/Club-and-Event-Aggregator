@@ -25,9 +25,61 @@
     $stmt->close();
 
     $message = "";
+    $deleteMsg = "";
+
+    // Handle delete club
+    if (isset($_POST['delete_club'])) {
+        $password = $_POST['password'] ?? '';
+
+        $stmt = $conn->prepare("SELECT password FROM admins WHERE adminID = ?");
+        $stmt->bind_param("s", $admin_id);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if ($row && password_verify($password, $row['password'])) {
+            // Get all events for this admin
+            $eventIDs = [];
+            $evt = $conn->prepare("SELECT eventID FROM events WHERE adminID = ?");
+            $evt->bind_param("s", $admin_id);
+            $evt->execute();
+            $evtRes = $evt->get_result();
+            while ($e = $evtRes->fetch_assoc()) {
+                $eventIDs[] = (int)$e['eventID'];
+            }
+            $evt->close();
+
+            if (!empty($eventIDs)) {
+                $idList = implode(',', $eventIDs);
+                $conn->query("DELETE FROM registrations WHERE eventID IN ($idList)");
+                $conn->query("DELETE FROM event_feedback WHERE eventID IN ($idList)");
+                $conn->query("DELETE FROM waiting_list WHERE eventID IN ($idList)");
+                $conn->query("DELETE FROM student_notifications WHERE eventID IN ($idList)");
+                $conn->query("DELETE FROM event_reminders_sent WHERE eventID IN ($idList)");
+            }
+
+            $conn->query("DELETE FROM events WHERE adminID = '$admin_id'");
+            $conn->query("DELETE FROM notifications WHERE adminID = '$admin_id'");
+            $conn->query("DELETE FROM club_members WHERE adminID = '$admin_id'");
+            $conn->query("DELETE FROM club_notify WHERE adminID = '$admin_id'");
+            $conn->query("DELETE FROM announcements WHERE adminID = '$admin_id'");
+            $conn->query("DELETE FROM clubs WHERE adminID = '$admin_id'");
+
+            $del = $conn->prepare("DELETE FROM admins WHERE adminID = ?");
+            $del->bind_param("s", $admin_id);
+            $del->execute();
+            $del->close();
+
+            session_destroy();
+            header("Location: AdminLogin.php?deleted=1");
+            exit();
+        } else {
+            $deleteMsg = 'Incorrect password. Club was not deleted.';
+        }
+    }
 
     // Handle incoming password updates securely
-    if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['delete_club'])) {
         $new_password = $_POST['new_password'];
         $confirm_password = $_POST['confirm_password'];
 
@@ -180,6 +232,31 @@
                 </div>
             </form>
         </div>
+
+        <div class="dashed-line" style="margin:30px 0;"></div>
+
+        <section class="settings-section">
+            <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px;">Deleting your club will permanently remove all events, registrations, club members, and related data. This cannot be undone.</p>
+
+            <?php if ($deleteMsg): ?>
+                <div style="background:var(--red-light);color:var(--red);border:1px solid rgba(237,28,36,0.2);padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+                    <?php echo htmlspecialchars($deleteMsg); ?>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" onsubmit="return confirm('Are you sure you want to permanently delete your club and all associated data? This action cannot be undone.');">
+                <div class="form-group">
+                    <label>Enter your password to confirm deletion:</label>
+                    <div class="password-wrapper">
+                        <input type="password" name="password" id="delete_password" required>
+                        <svg id="eye_icon_3" class="eye-icon" width="24" height="24" onclick="togglePassword('delete_password', 'eye_icon_3')" viewBox="0 0 24 24">
+                            <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2z"/>
+                        </svg>
+                    </div>
+                </div>
+                <button type="submit" name="delete_club" class="btn-danger-outline">Delete Club</button>
+            </form>
+        </section>
     </main>
 </body>
 </html>

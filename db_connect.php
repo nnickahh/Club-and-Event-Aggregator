@@ -45,6 +45,8 @@
               clubName VARCHAR(255) NOT NULL,
               clubEmail VARCHAR(255) UNIQUE,
               password VARCHAR(255) NOT NULL,
+              security_question VARCHAR(255) DEFAULT NULL,
+              security_answer VARCHAR(255) DEFAULT NULL,
               status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
@@ -196,6 +198,20 @@
         }
     } catch (mysqli_sql_exception $e) {
         error_log('DB decline_reason migration error: ' . $e->getMessage());
+    }
+
+    // Add `security_question` and `security_answer` columns to `admins` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM admins LIKE 'security_question'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE admins ADD COLUMN security_question VARCHAR(255) DEFAULT NULL AFTER password");
+        }
+        $check = $conn->query("SHOW COLUMNS FROM admins LIKE 'security_answer'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE admins ADD COLUMN security_answer VARCHAR(255) DEFAULT NULL AFTER security_question");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB admins security columns error: ' . $e->getMessage());
     }
 
     // Add `decline_reason` column to `admins` table (for declined club registration feedback)
@@ -411,6 +427,35 @@
         }
     } catch (mysqli_sql_exception $e) {
         error_log('DB announcements table creation error: ' . $e->getMessage());
+    }
+
+    // Add `security_question` and `security_answer` columns to `students` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM students LIKE 'security_question'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE students ADD COLUMN security_question VARCHAR(255) DEFAULT NULL AFTER password");
+        }
+        $check = $conn->query("SHOW COLUMNS FROM students LIKE 'security_answer'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE students ADD COLUMN security_answer VARCHAR(255) DEFAULT NULL AFTER security_question");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB students security columns error: ' . $e->getMessage());
+    }
+
+    // Create `event_feedback` table for student ratings and feedback
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS event_feedback (
+            feedbackID INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            eventID INT UNSIGNED NOT NULL,
+            studentID VARCHAR(20) NOT NULL,
+            rating TINYINT UNSIGNED NOT NULL,
+            `comment` TEXT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_feedback (eventID, studentID)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB event_feedback table creation error: ' . $e->getMessage());
     }
 
 // ─── Helper functions ──────────────────────────────────────

@@ -14,6 +14,8 @@
         $email = trim($_POST['email']);
         $password = $_POST['password'];
         $confirm_password = $_POST['confirm_password'];
+        $security_question = trim($_POST['security_question'] ?? '');
+        $security_answer = trim($_POST['security_answer'] ?? '');
 
         // Backend Validation requirements
         $uppercase = preg_match('@[A-Z]@', $password);
@@ -42,8 +44,9 @@
 
                 // FIXED: Explicitly mapped structure to match your exact phpMyAdmin column positions
                 // 1. studentID | 2. name | 3. email | 4. password
-                $insert_stmt = $conn->prepare("INSERT INTO students (studentID, name, email, password) VALUES (?, ?, ?, ?)");
-                $insert_stmt->bind_param("ssss", $student_id, $fullname, $email, $hashed_password);
+                $hashed_answer = password_hash($security_answer, PASSWORD_DEFAULT);
+                $insert_stmt = $conn->prepare("INSERT INTO students (studentID, name, email, password, security_question, security_answer) VALUES (?, ?, ?, ?, ?, ?)");
+                $insert_stmt->bind_param("ssssss", $student_id, $fullname, $email, $hashed_password, $security_question, $hashed_answer);
 
                 if ($insert_stmt->execute()) {
                     $insert_stmt->close();
@@ -123,6 +126,22 @@
                     value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
             </div>
             
+            <div class="form-group">
+                <label>Security Question :</label>
+                <select name="security_question" required>
+                    <option value="" disabled selected>Select a question</option>
+                    <option value="What was the name of your first school?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === 'What was the name of your first school?') ? 'selected' : ''; ?>>What was the name of your first school?</option>
+                    <option value="What is your pet's name?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === "What is your pet's name?") ? 'selected' : ''; ?>>What is your pet's name?</option>
+                    <option value="What city were you born in?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === 'What city were you born in?') ? 'selected' : ''; ?>>What city were you born in?</option>
+                    <option value="What is your mother's maiden name?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === "What is your mother's maiden name?") ? 'selected' : ''; ?>>What is your mother's maiden name?</option>
+                    <option value="What was your first car?" <?php echo (isset($_POST['security_question']) && $_POST['security_question'] === 'What was your first car?') ? 'selected' : ''; ?>>What was your first car?</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Security Answer :</label>
+                <input type="text" name="security_answer" required placeholder="Your answer"
+                    value="<?php echo isset($_POST['security_answer']) ? htmlspecialchars($_POST['security_answer']) : ''; ?>">
+            </div>
             <div class="form-group">
                 <label>Password :</label>
                 <p class="password-hint-inline">* Must be at least 8 chars with uppercase, lowercase, numbers & symbols.</p>

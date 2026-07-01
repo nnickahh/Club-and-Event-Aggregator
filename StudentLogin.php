@@ -92,6 +92,12 @@
         
         <?php echo $message; ?>
 
+        <?php if (isset($_GET['deleted']) && $_GET['deleted'] === '1'): ?>
+            <div class="msg-banner" style="background:var(--green-bg);color:var(--green);border:1px solid rgba(45,125,70,0.2);padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+                Your account has been deleted successfully.
+            </div>
+        <?php endif; ?>
+
         <form action="StudentLogin.php" method="POST">
             <div class="form-group">
                 <label>Email Address</label>

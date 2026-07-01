@@ -438,8 +438,9 @@
                 <h3>Club Members (<?php echo $membersResult->num_rows; ?>)</h3>
                 <div class="member-header-actions">
                     <?php if ($membersResult->num_rows > 0): ?>
-                        <button type="button" class="btn-modern-secondary" id="memberSelectModeBtn" onclick="toggleMemberSelectionMode()">Select</button>
-                        <button type="button" class="btn-modern-secondary bulk-remove-btn hidden" id="bulkRemoveMemberBtn" onclick="openBulkRemoveMembers()">Remove Member</button>
+                        <button type="button" class="btn-modern-secondary" id="editMembersBtn" onclick="toggleEditMode()">✏️ Edit Members</button>
+                        <button type="button" class="btn-modern-secondary bulk-remove-btn hidden" id="bulkRemoveMemberBtn" onclick="openBulkRemoveMembers()">Remove Selected</button>
+                        <button type="button" class="btn-modern-primary hidden" id="doneEditingBtn" onclick="toggleEditMode()">Done</button>
                     <?php endif; ?>
                     <button type="button" class="btn-modern-secondary" onclick="openAddMemberModal()">+ Member</button>
                 </div>
@@ -456,7 +457,7 @@
                                 <th>Full Name</th>
                                 <th>Official Email Address</th>
                                 <th>Position</th>
-                                <th>Action</th>
+                                <th class="edit-mode-col hidden">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -481,7 +482,7 @@
                                             <?php echo htmlspecialchars($displayPosition); ?>
                                         </span>
                                     </td>
-                                    <td style="white-space:nowrap;">
+                                    <td class="edit-mode-col hidden" style="white-space:nowrap;">
                                         <div class="member-action-row">
                                             <form method="POST" class="role-input-form" onsubmit="return confirm('Update role for <?php echo htmlspecialchars($memb['studentID']); ?>?');">
                                                 <input type="hidden" name="update_role" value="1">
@@ -497,7 +498,7 @@
                                                         </option>
                                                     <?php endforeach; ?>
                                                 </select>
-                                                <button type="submit">Set</button>
+                                                <button type="submit" class="role-set-btn">Set</button>
                                             </form>
                                             <button
                                                 type="button"
@@ -587,6 +588,8 @@
     </div>
 
     <script>
+        let editMode = false;
+
         function switchActiveTab(event, tabId) {
             const panels = document.querySelectorAll('.tab-content-panel');
             panels.forEach(panel => panel.classList.remove('active'));
@@ -629,11 +632,7 @@
 
         function previewClubProfilePicture(input) {
             const file = input.files && input.files[0] ? input.files[0] : null;
-
-            if (!file) {
-                return;
-            }
-
+            if (!file) return;
             document.getElementById('clubProfilePreview').src = URL.createObjectURL(file);
         }
 
@@ -671,31 +670,37 @@
             document.getElementById('removeMemberReason').focus();
         }
 
-        let memberSelectionMode = false;
-
         function getSelectedMemberCheckboxes() {
             return Array.from(document.querySelectorAll('.member-select-checkbox:checked'));
         }
 
-        function setMemberSelectionMode(enabled) {
-            memberSelectionMode = enabled;
+        function setEditMode(enabled) {
+            editMode = enabled;
+
+            // Toggle all checkboxes column
             document.querySelectorAll('.member-select-col').forEach(cell => {
                 cell.classList.toggle('hidden', !enabled);
             });
 
-            const selectBtn = document.getElementById('memberSelectModeBtn');
+            // Toggle the Action column (role forms + remove buttons)
+            document.querySelectorAll('.edit-mode-col').forEach(cell => {
+                cell.classList.toggle('hidden', !enabled);
+            });
+
+            // Toggle header buttons
+            const editBtn = document.getElementById('editMembersBtn');
+            const doneBtn = document.getElementById('doneEditingBtn');
             const bulkBtn = document.getElementById('bulkRemoveMemberBtn');
-            const selectAll = document.getElementById('selectAllMembers');
-            if (selectBtn) {
-                selectBtn.textContent = enabled ? 'Cancel' : 'Select';
-            }
-            if (bulkBtn) {
-                bulkBtn.classList.toggle('hidden', !enabled);
-            }
+
+            if (editBtn) editBtn.classList.toggle('hidden', enabled);
+            if (doneBtn) doneBtn.classList.toggle('hidden', !enabled);
+            if (bulkBtn) bulkBtn.classList.toggle('hidden', !enabled);
+
             if (!enabled) {
                 document.querySelectorAll('.member-select-checkbox').forEach(box => {
                     box.checked = false;
                 });
+                const selectAll = document.getElementById('selectAllMembers');
                 if (selectAll) {
                     selectAll.checked = false;
                     selectAll.indeterminate = false;
@@ -703,8 +708,8 @@
             }
         }
 
-        function toggleMemberSelectionMode() {
-            setMemberSelectionMode(!memberSelectionMode);
+        function toggleEditMode() {
+            setEditMode(!editMode);
         }
 
         function openBulkRemoveMembers() {
@@ -737,9 +742,6 @@
             const checkedCount = boxes.filter(box => box.checked).length;
             selectAll.checked = checkedCount === boxes.length;
             selectAll.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
-            if (bulkBtn) {
-                bulkBtn.classList.toggle('hidden', !memberSelectionMode);
-            }
         }
 
         function closeRemoveMemberModal(e) {

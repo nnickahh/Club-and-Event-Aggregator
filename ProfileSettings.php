@@ -7,11 +7,10 @@
         header("Location: StudentLogin.php");
         exit();
     }
-    session_write_close();
 
     $student_id = $_SESSION['student_id'];
+    session_write_close();
 
-    // Updated query to match your exact DB columns: studentID and name
     $query = "SELECT name, email FROM students WHERE studentID = ?";
     $stmt = $conn->prepare($query);
 
