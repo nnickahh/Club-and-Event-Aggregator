@@ -9,6 +9,7 @@
     $currentPage = 'events';
     $tab = isset($_GET['tab']) ? $_GET['tab'] : 'pending';
     $today = date('Y-m-d');
+    $monthEnd = date('Y-m-t');
     $flashMessage = $_SESSION['flash_message'] ?? null;
     unset($_SESSION['flash_message']);
     session_write_close();
@@ -16,13 +17,23 @@
     $counts = ['pending' => 0, 'ongoing' => 0, 'upcoming' => 0, 'completed' => 0, 'cancelled' => 0];
 
     try {
-        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'pending'");
+        $r = $conn->query("
+            SELECT COUNT(*) AS c FROM (
+                SELECT 1
+                FROM events
+                WHERE status = 'pending'
+                GROUP BY CASE
+                    WHEN recurrence_group_id IS NULL OR recurrence_group_id = '' THEN CONCAT('single-', eventID)
+                    ELSE recurrence_group_id
+                END
+            ) grouped_pending
+        ");
         $counts['pending'] = $r ? $r->fetch_assoc()['c'] : 0;
 
         $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'approved' AND '$today' BETWEEN eventDate AND COALESCE(eventEndDate, eventDate)");
         $counts['ongoing'] = $r ? $r->fetch_assoc()['c'] : 0;
 
-        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'approved' AND eventDate > '$today'");
+        $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE status = 'approved' AND eventDate > '$today' AND eventDate <= '$monthEnd'");
         $counts['upcoming'] = $r ? $r->fetch_assoc()['c'] : 0;
 
         $r = $conn->query("SELECT COUNT(*) AS c FROM events WHERE (status = 'approved' AND '$today' > COALESCE(eventEndDate, eventDate)) OR status = 'ended'");
@@ -34,22 +45,40 @@
         $join = " FROM events e LEFT JOIN admins a ON e.adminID = a.adminID";
         switch ($tab) {
             case 'pending':
-                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'pending' ORDER BY e.created_at DESC";
+                $q = "
+                    SELECT e.*, a.clubName AS clubName, g.group_start, g.group_end, g.session_count
+                    FROM events e
+                    INNER JOIN (
+                        SELECT
+                            MIN(eventID) AS representative_id,
+                            MIN(eventDate) AS group_start,
+                            MAX(eventDate) AS group_end,
+                            COUNT(*) AS session_count
+                        FROM events
+                        WHERE status = 'pending'
+                        GROUP BY CASE
+                            WHEN recurrence_group_id IS NULL OR recurrence_group_id = '' THEN CONCAT('single-', eventID)
+                            ELSE recurrence_group_id
+                        END
+                    ) g ON e.eventID = g.representative_id
+                    LEFT JOIN admins a ON e.adminID = a.adminID
+                    ORDER BY e.created_at DESC
+                ";
                 break;
             case 'ongoing':
-                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'approved' AND '$today' BETWEEN e.eventDate AND COALESCE(e.eventEndDate, e.eventDate) ORDER BY e.eventTime ASC";
+                $q = "SELECT e.*, a.clubName AS clubName" . $join . " WHERE e.status = 'approved' AND '$today' BETWEEN e.eventDate AND COALESCE(e.eventEndDate, e.eventDate) ORDER BY e.eventTime ASC";
                 break;
             case 'upcoming':
-                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'approved' AND e.eventDate > '$today' ORDER BY e.eventDate ASC";
+                $q = "SELECT e.*, a.clubName AS clubName" . $join . " WHERE e.status = 'approved' AND e.eventDate > '$today' AND e.eventDate <= '$monthEnd' ORDER BY e.eventDate ASC";
                 break;
             case 'completed':
-                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE (e.status = 'approved' AND '$today' > COALESCE(e.eventEndDate, e.eventDate)) OR e.status = 'ended' ORDER BY e.eventDate DESC";
+                $q = "SELECT e.*, a.clubName AS clubName" . $join . " WHERE (e.status = 'approved' AND '$today' > COALESCE(e.eventEndDate, e.eventDate)) OR e.status = 'ended' ORDER BY e.eventDate DESC";
                 break;
             case 'cancelled':
-                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'cancelled' ORDER BY e.eventDate DESC";
+                $q = "SELECT e.*, a.clubName AS clubName" . $join . " WHERE e.status = 'cancelled' ORDER BY e.eventDate DESC";
                 break;
             default:
-                $q = "SELECT e.*, a.clubName AS club_name" . $join . " WHERE e.status = 'pending' ORDER BY e.created_at DESC";
+                $q = "SELECT e.*, a.clubName AS clubName" . $join . " WHERE e.status = 'pending' ORDER BY e.created_at DESC";
         }
         $result = $conn->query($q);
         if ($result) { $events = $result->fetch_all(MYSQLI_ASSOC); }
@@ -59,7 +88,7 @@
 
     $eventClubNames = [];
     foreach ($events as $event) {
-        $clubName = trim($event['club_name'] ?? '');
+        $clubName = trim($event['clubName'] ?? '');
         if ($clubName !== '') {
             $eventClubNames[strtolower($clubName)] = $clubName;
         }
@@ -147,21 +176,24 @@
             <?php echo count($events); ?> event<?php echo count($events) !== 1 ? 's' : ''; ?> found
         </p>
 
-        <section class="event-grid">
+        <section class="event-grid moderator-events-grid <?php echo empty($events) ? 'moderator-events-empty-grid' : ''; ?>">
             <?php if (!empty($events)): ?>
                 <?php foreach ($events as $event): ?>
+                    <?php
+                        $displayStartDate = $event['group_start'] ?? $event['eventDate'];
+                        $displayEndDate = $event['group_end'] ?? ($event['eventEndDate'] ?? null);
+                        $sessionCount = (int)($event['session_count'] ?? 1);
+                        $isRecurringRequest = $sessionCount > 1 || !empty($event['recurrence_group_id']);
+                    ?>
                     <article class="event-card mod-events-card"
                              data-title="<?php echo htmlspecialchars(strtolower($event['eventTitle'] ?? ''), ENT_QUOTES); ?>"
-                             data-club="<?php echo htmlspecialchars(strtolower($event['club_name'] ?? ''), ENT_QUOTES); ?>"
+                             data-club="<?php echo htmlspecialchars(strtolower($event['clubName'] ?? ''), ENT_QUOTES); ?>"
                              data-venue="<?php echo htmlspecialchars(strtolower($event['venue'] ?? ''), ENT_QUOTES); ?>"
-                             data-date="<?php echo htmlspecialchars($event['eventDate'] ?? '', ENT_QUOTES); ?>">
+                             data-date="<?php echo htmlspecialchars($displayStartDate ?? '', ENT_QUOTES); ?>">
                         <div class="card-stripe" data-color="<?php echo $tab === 'completed' ? 'green' : ($tab === 'cancelled' ? 'red' : ($tab === 'pending' ? 'amber' : ($tab === 'ongoing' ? 'blue' : 'purple'))); ?>"></div>
-                        <?php if (!empty($event['eventImage'])): ?>
-                            <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" class="img-event-card">
-                        <?php endif; ?>
                         <div class="card-body">
                             <?php if ($tab === 'pending'): ?>
-                                <span class="mod-pending-badge"><span class="mod-badge-dot"></span>Pending review</span>
+                                <span class="mod-pending-badge"><span class="mod-badge-dot"></span><?php echo $isRecurringRequest ? 'Recurring request' : 'Pending review'; ?></span>
                             <?php elseif ($tab === 'ongoing'): ?>
                                 <span class="mod-status-tag approved">Ongoing</span>
                             <?php elseif ($tab === 'upcoming'): ?>
@@ -177,7 +209,12 @@
                             <div class="event-meta">
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-                                    <span><?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?></span>
+                                    <span>
+                                        <?php echo formatDateRange($displayStartDate, $displayEndDate); ?>
+                                        <?php if ($isRecurringRequest): ?>
+                                            <small class="text-xs-muted"> · <?php echo $sessionCount; ?> sessions</small>
+                                        <?php endif; ?>
+                                    </span>
                                 </div>
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -189,7 +226,7 @@
                                 </div>
                                 <div class="meta-row">
                                     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                                    <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" class="no-deco stat-link-inherit"><span><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
+                                    <a href="ClubDetailsModerator.php?id=<?php echo (int)$event['adminID']; ?>" class="no-deco stat-link-inherit"><span><?php echo htmlspecialchars($event['clubName'] ?? 'Unknown Club'); ?></span></a>
                                 </div>
                             </div>
 
@@ -208,7 +245,7 @@
                     </article>
                 <?php endforeach; ?>
             <?php else: ?>
-                <div class="event-empty-box">
+                <div class="event-empty-box <?php echo in_array($tab, ['pending', 'ongoing'], true) ? 'mod-empty-box-large' : ''; ?>">
                     <div class="empty-icon">
                         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
                     </div>

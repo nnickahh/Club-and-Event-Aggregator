@@ -14,7 +14,7 @@
         $eventID = $_GET['id'];
 
         // 3. Fetch specific event details using Prepared Statement
-        $stmt = $conn->prepare("SELECT e.*, a.clubName AS club_name, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE e.eventID = ?");
+        $stmt = $conn->prepare("SELECT e.*, a.clubName AS clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE e.eventID = ?");
         $stmt->bind_param("i", $eventID);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -30,7 +30,7 @@
     }
 
     $fee = floatval($event['fee'] ?? 0);
-    $paymentMethods = array_filter(array_map('trim', explode(',', $event['payment_methods'] ?? '')));
+    $payment_methods = array_filter(array_map('trim', explode(',', $event['payment_methods'] ?? '')));
     $paymentLabels = ['cash'=>'Cash', 'tng'=>'TNG (Touch \'n Go)', 'bank_in'=>'Bank'];
     $bankData = !empty($event['bank_details']) ? json_decode($event['bank_details'], true) : null;
 
@@ -87,7 +87,7 @@
             <?php if (!empty($event['eventImage'])): ?>
                 <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event poster" class="img-event-detail clickable-poster" onclick="openEventPosterViewer(this.src)">
             <?php endif; ?>
-            <a href="ClubsDetails.php?id=<?php echo (int)($event['clubID'] ?? 0); ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? $event['clubName'] ?? 'Club'); ?></span></a>
+            <a href="ClubsDetails.php?id=<?php echo (int)($event['clubID'] ?? 0); ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['clubName'] ?? $event['clubName'] ?? 'Club'); ?></span></a>
             <h1 class="event-detail-title"><?php echo htmlspecialchars($event['eventTitle']); ?></h1>
             
             <?php if ($event['status'] === 'cancelled'): ?>
@@ -156,18 +156,18 @@
                         <label class="form-label-md">Payment Method</label>
                         <select name="payment_method" class="form-select payment-method-select">
                             <option value="">Select Payment Method</option>
-                            <?php foreach ($paymentMethods as $m): ?>
+                            <?php foreach ($payment_methods as $m): ?>
                             <option value="<?php echo htmlspecialchars($m); ?>"><?php echo $paymentLabels[$m] ?? $m; ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <?php if (in_array('tng', $paymentMethods, true) && (!empty($event['tng_phone']) || !empty($event['tng_qr']))): ?>
+                        <?php if (in_array('tng', $payment_methods, true) && (!empty($event['tng_phone']) || !empty($event['tng_qr']))): ?>
                         <div class="payment-box payment-detail-box" data-method="tng">
                             <strong>TNG Details</strong><br>
                             <?php if (!empty($event['tng_phone'])): ?><span class="payment-phone-number">Phone Number: <?php echo htmlspecialchars($event['tng_phone']); ?></span><br><?php endif; ?>
                             <?php if (!empty($event['tng_qr'])): ?><img src="<?php echo htmlspecialchars($event['tng_qr']); ?>" class="img-tng-qr" alt="TNG QR code"><?php endif; ?>
                         </div>
                         <?php endif; ?>
-                        <?php if (in_array('bank_in', $paymentMethods, true) && $bankData): ?>
+                        <?php if (in_array('bank_in', $payment_methods, true) && $bankData): ?>
                         <div class="payment-box payment-detail-box" data-method="bank_in">
                             <strong>Bank Details</strong><br>
                             <?php if (!empty($bankData['bank_name'])): ?>Bank: <?php echo htmlspecialchars($bankData['bank_name']); ?><br><?php endif; ?>

@@ -188,6 +188,28 @@
         error_log('DB eventEndDate migration error: ' . $e->getMessage());
     }
 
+    // Add recurring activity columns to `events` table
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'recurrence_group_id'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN recurrence_group_id VARCHAR(80) DEFAULT NULL AFTER eventEndDate");
+        }
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'recurrence_type'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN recurrence_type VARCHAR(20) DEFAULT 'none' AFTER recurrence_group_id");
+        }
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'recurrence_start_date'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN recurrence_start_date DATE DEFAULT NULL AFTER recurrence_type");
+        }
+        $check = $conn->query("SHOW COLUMNS FROM events LIKE 'recurrence_end_date'");
+        if (!$check || $check->num_rows === 0) {
+            $conn->query("ALTER TABLE events ADD COLUMN recurrence_end_date DATE DEFAULT NULL AFTER recurrence_start_date");
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('DB recurring activity migration error: ' . $e->getMessage());
+    }
+
     // Add `decline_reason` column to `events` table (for moderator decline feedback)
     try {
         $check = $conn->query("SHOW COLUMNS FROM events LIKE 'decline_reason'");
@@ -435,11 +457,11 @@ function getEventPeriod($eventDate, $eventEndDate, $currentDate) {
     return 'past';
 }
 
-function logModeratorActivity($conn, $moderatorID, $moderatorName, $actionType, $targetType, $targetID, $targetTitle, $details = null) {
+function logModeratorActivity($conn, $moderatorID, $moderatorName, $action_type, $target_type, $target_id, $target_title, $details = null) {
     try {
         $stmt = $conn->prepare("INSERT INTO moderator_activity_log (moderatorID, moderatorName, action_type, target_type, target_id, target_title, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $targetID = $targetID !== null ? (string)$targetID : null;
-        $stmt->bind_param("sssssss", $moderatorID, $moderatorName, $actionType, $targetType, $targetID, $targetTitle, $details);
+        $target_id = $target_id !== null ? (string)$target_id : null;
+        $stmt->bind_param("sssssss", $moderatorID, $moderatorName, $action_type, $target_type, $target_id, $target_title, $details);
         $stmt->execute();
         $stmt->close();
     } catch (mysqli_sql_exception $e) {

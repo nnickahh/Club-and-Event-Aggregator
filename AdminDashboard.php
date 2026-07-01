@@ -15,7 +15,7 @@
     unset($_SESSION['announcement_flash']);
 
     $adminID = $_SESSION['admin_id'];
-    $clubName = isset($_SESSION['club_name']) ? $_SESSION['club_name'] : "Club Admin";
+    $clubName = isset($_SESSION['clubName']) ? $_SESSION['clubName'] : "Club Admin";
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_announcement'])) {
         $announcementTitle = trim($_POST['announcement_title'] ?? '');
@@ -91,6 +91,7 @@
     $completedEvents = [];
     $cancelledEvents = [];
     $currentDate = date('Y-m-d');
+    $weekEnd = date('Y-m-d', strtotime('sunday this week'));
 
     if ($result && $result->num_rows > 0) {
         while($row = $result->fetch_assoc()) {
@@ -102,6 +103,11 @@
                 if ($p === 'ongoing') {
                     $ongoingEvents[] = $row;
                 } elseif ($p === 'upcoming') {
+                    if (($row['recurrence_type'] ?? '') === 'weekly' && !empty($row['recurrence_group_id'])) {
+                        if ($row['eventDate'] > $weekEnd) {
+                            continue;
+                        }
+                    }
                     $upcomingEvents[] = $row;
                 } else {
                     $completedEvents[] = $row;

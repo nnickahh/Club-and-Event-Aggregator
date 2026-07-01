@@ -34,7 +34,7 @@
                         // Login Success!
                         $_SESSION['admin_id'] = $row['adminID'];
                         $_SESSION['full_name'] = $row['name'];
-                        $_SESSION['club_name'] = $row['clubName'];
+                        $_SESSION['clubName'] = $row['clubName'];
                         $_SESSION['role'] = 'admin';
                         session_regenerate_id(true);
                         session_write_close();

@@ -52,13 +52,41 @@
         $result = $conn->query("SELECT COUNT(*) AS cnt FROM admins WHERE status = 'pending'");
         if ($result) { $pendingClubs = $result->fetch_assoc()['cnt']; }
 
-        $result = $conn->query("SELECT COUNT(*) AS cnt FROM events WHERE status = 'pending'");
+        $result = $conn->query("
+            SELECT COUNT(*) AS cnt FROM (
+                SELECT 1
+                FROM events
+                WHERE status = 'pending'
+                GROUP BY CASE
+                    WHEN recurrence_group_id IS NULL OR recurrence_group_id = '' THEN CONCAT('single-', eventID)
+                    ELSE recurrence_group_id
+                END
+            ) grouped_pending
+        ");
         if ($result) { $pendingEvents = $result->fetch_assoc()['cnt']; }
 
         $result = $conn->query("SELECT COUNT(*) AS cnt FROM admins WHERE status = 'active'");
         if ($result) { $activeClubs = $result->fetch_assoc()['cnt']; }
 
-        $result = $conn->query("SELECT e.*, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID ORDER BY e.created_at DESC LIMIT 10");
+        $result = $conn->query("
+            SELECT e.*, a.clubName AS clubName, g.group_start, g.group_end, g.session_count
+            FROM events e
+            INNER JOIN (
+                SELECT
+                    MIN(eventID) AS representative_id,
+                    MIN(eventDate) AS group_start,
+                    MAX(eventDate) AS group_end,
+                    COUNT(*) AS session_count
+                FROM events
+                GROUP BY CASE
+                    WHEN recurrence_group_id IS NULL OR recurrence_group_id = '' THEN CONCAT('single-', eventID)
+                    ELSE recurrence_group_id
+                END
+            ) g ON e.eventID = g.representative_id
+            LEFT JOIN admins a ON e.adminID = a.adminID
+            ORDER BY e.created_at DESC
+            LIMIT 10
+        ");
         if ($result) {
             $events = $result->fetch_all(MYSQLI_ASSOC);
             foreach ($events as $event) {
@@ -76,7 +104,7 @@
                     'eventID' => null,
                     'adminID' => $club['adminID'],
                     'eventTitle' => 'New club registration',
-                    'club_name' => $club['clubName'],
+                    'clubName' => $club['clubName'],
                     'clubEmail' => $club['clubEmail'],
                     'applicant_name' => $club['name'],
                     'status' => $club['status'],
@@ -90,7 +118,26 @@
 	        });
 	        $recentActivity = array_slice($recentActivity, 0, 10);
 
-	        $eventQueue = $conn->query("SELECT e.eventID, e.eventTitle, e.eventDate, e.eventTime, e.venue, e.created_at, a.clubName AS club_name FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'pending' ORDER BY e.created_at DESC LIMIT 6");
+	        $eventQueue = $conn->query("
+            SELECT e.eventID, e.eventTitle, e.eventDate, e.eventTime, e.venue, e.created_at, a.clubName AS clubName, g.group_start, g.group_end, g.session_count
+            FROM events e
+            INNER JOIN (
+                SELECT
+                    MIN(eventID) AS representative_id,
+                    MIN(eventDate) AS group_start,
+                    MAX(eventDate) AS group_end,
+                    COUNT(*) AS session_count
+                FROM events
+                WHERE status = 'pending'
+                GROUP BY CASE
+                    WHEN recurrence_group_id IS NULL OR recurrence_group_id = '' THEN CONCAT('single-', eventID)
+                    ELSE recurrence_group_id
+                END
+            ) g ON e.eventID = g.representative_id
+            LEFT JOIN admins a ON e.adminID = a.adminID
+            ORDER BY e.created_at DESC
+            LIMIT 6
+        ");
 	        if ($eventQueue) {
 	            foreach ($eventQueue->fetch_all(MYSQLI_ASSOC) as $item) {
 	                $item['queue_type'] = 'event';
@@ -111,7 +158,7 @@
 	        });
 	        $pendingReviewQueue = array_slice($pendingReviewQueue, 0, 8);
 
-	        $logResult = $conn->query("SELECT * FROM moderator_activity_log ORDER BY created_at DESC LIMIT 8");
+	        $logResult = $conn->query("SELECT * FROM moderator_activity_log WHERE created_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) ORDER BY created_at DESC LIMIT 8");
 	        if ($logResult) {
 	            $moderatorLogs = $logResult->fetch_all(MYSQLI_ASSOC);
 	        }
@@ -288,21 +335,28 @@
                         $activityTarget = $activityType === 'club'
                             ? "ModeratorClubs.php?tab=pending"
                             : "EventDetailsModerator.php?id=" . (int)$act['eventID'];
-                        $activitySearchTitle = strtolower(($act['eventTitle'] ?? '') . ' ' . ($act['applicant_name'] ?? '') . ' ' . ($act['clubEmail'] ?? ''));
+                        $activitySessionCount = (int)($act['session_count'] ?? 1);
+                        $activityDateNote = ($activityType === 'event' && $activitySessionCount > 1)
+                            ? formatDateRange($act['group_start'] ?? $act['eventDate'], $act['group_end'] ?? $act['eventDate']) . ' · ' . $activitySessionCount . ' sessions'
+                            : '';
+                        $activitySearchTitle = strtolower(($act['eventTitle'] ?? '') . ' ' . ($act['applicant_name'] ?? '') . ' ' . ($act['clubEmail'] ?? '') . ' ' . $activityDateNote);
                     ?>
                     <div class="mod-activity-item"
 	                         onclick="window.location.href='<?php echo htmlspecialchars($activityTarget, ENT_QUOTES); ?>'"
 	                         data-title="<?php echo htmlspecialchars($activitySearchTitle, ENT_QUOTES); ?>"
-	                         data-club="<?php echo htmlspecialchars(strtolower($act['club_name'] ?? ''), ENT_QUOTES); ?>"
+	                         data-club="<?php echo htmlspecialchars(strtolower($act['clubName'] ?? ''), ENT_QUOTES); ?>"
 	                         data-type="<?php echo htmlspecialchars($activityType, ENT_QUOTES); ?>"
 	                         data-status="<?php echo htmlspecialchars($activityStatus, ENT_QUOTES); ?>">
                         <span class="mod-activity-dot"></span>
                         <span>
                             <span class="act-title"><?php echo htmlspecialchars($act['eventTitle']); ?></span>
+                            <?php if ($activityDateNote !== ''): ?>
+                                <span class="text-xs-muted"> <?php echo htmlspecialchars($activityDateNote); ?></span>
+                            <?php endif; ?>
                             <?php if ($activityType === 'club'): ?>
-                                <span class="act-club">for <a href="ModeratorClubs.php?tab=pending" class="text-muted-link-inherit" onclick="event.stopPropagation();"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
+                                <span class="act-club">for <a href="ModeratorClubs.php?tab=pending" class="text-muted-link-inherit" onclick="event.stopPropagation();"><?php echo htmlspecialchars($act['clubName'] ?? 'Unknown'); ?></a></span>
                             <?php else: ?>
-                                <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo urlencode($act['adminID']); ?>" class="text-muted-link-inherit" onclick="event.stopPropagation();"><?php echo htmlspecialchars($act['club_name'] ?? 'Unknown'); ?></a></span>
+                                <span class="act-club">by <a href="ClubDetailsModerator.php?id=<?php echo urlencode($act['adminID']); ?>" class="text-muted-link-inherit" onclick="event.stopPropagation();"><?php echo htmlspecialchars($act['clubName'] ?? 'Unknown'); ?></a></span>
                             <?php endif; ?>
                             <span class="act-status">-
                                 <?php

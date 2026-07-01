@@ -51,14 +51,14 @@
                     $msgType = 'success';
                 }
             } elseif ($action === 'decline') {
-                $declineReason = trim($_POST['decline_reason'] ?? '');
+                $decline_reason = trim($_POST['decline_reason'] ?? '');
 
-                if ($declineReason === '') {
+                if ($decline_reason === '') {
                     $msg = 'Please write a reason before declining this club registration.';
                     $msgType = 'error';
                 } else {
                     $stmt = $conn->prepare("UPDATE admins SET status = 'declined', decline_reason = ? WHERE adminID = ? AND status = 'pending'");
-                    $stmt->bind_param("ss", $declineReason, $adminID);
+                    $stmt->bind_param("ss", $decline_reason, $adminID);
                     $stmt->execute();
 	                    if ($stmt->affected_rows > 0) {
 	                        $clubInfo = $conn->prepare("SELECT clubName FROM admins WHERE adminID = ?");
@@ -66,7 +66,7 @@
 	                        $clubInfo->execute();
 	                        $clubRow = $clubInfo->get_result()->fetch_assoc();
 	                        $clubInfo->close();
-	                        logModeratorActivity($conn, $moderatorID, $moderatorName, 'declined', 'club', $adminID, $clubRow['clubName'] ?? 'Club registration', $declineReason);
+	                        logModeratorActivity($conn, $moderatorID, $moderatorName, 'declined', 'club', $adminID, $clubRow['clubName'] ?? 'Club registration', $decline_reason);
 	                        $msg = 'Club registration declined.';
 	                        $msgType = 'success';
                     }
