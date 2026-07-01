@@ -495,10 +495,12 @@ function formatDateRange($eventDate, $eventEndDate = null) {
     return date('j M', $s) . ' - ' . date('j M Y', $e);
 }
 
-function getEventPeriod($eventDate, $eventEndDate, $currentDate) {
-    $end = $eventEndDate ?: $eventDate;
-    if ($currentDate >= $eventDate && $currentDate <= $end) return 'ongoing';
-    if ($currentDate < $eventDate) return 'upcoming';
+function getEventPeriod($eventDate, $eventEndDate, $currentDate, $eventTime = null, $eventEndTime = null) {
+    $startDT = $eventDate . ' ' . ($eventTime ?? '00:00:00');
+    $endDT   = ($eventEndDate ?? $eventDate) . ' ' . ($eventEndTime ?? '23:59:59');
+    $now     = $currentDate . ' ' . date('H:i:s');
+    if ($now >= $startDT && $now <= $endDT) return 'ongoing';
+    if ($now < $startDT) return 'upcoming';
     return 'past';
 }
 

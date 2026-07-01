@@ -127,6 +127,12 @@
                 <div class="registered-banner" style="background:#fff8e1;border-color:#ffe082;">
                     <span class="registered-text" style="color:#f57f17;">⏳ You are on the waiting list</span>
                 </div>
+                <div class="text-center mt-12">
+                    <form action="RemoveWaitlist.php" method="POST" onsubmit="return confirm('Remove yourself from the waiting list for this event?');">
+                        <input type="hidden" name="eventID" value="<?php echo (int)$event['eventID']; ?>">
+                        <button type="submit" class="btn-primary btn-cancel btn-primary-sm">Remove from Waiting List</button>
+                    </form>
+                </div>
             <?php elseif ($isFull): ?>
                 <div class="text-center mt-16">
                     <p style="color:#dc2626;font-weight:600;margin-bottom:12px;">This event is full.</p>

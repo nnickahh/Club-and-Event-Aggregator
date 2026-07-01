@@ -9,6 +9,40 @@
     }
 
     $student_id = $_SESSION['student_id'];
+    $deleteMsg = '';
+
+    // Handle account deletion
+    if (isset($_POST['delete_account'])) {
+        $password = $_POST['password'] ?? '';
+
+        $stmt = $conn->prepare("SELECT password FROM students WHERE studentID = ?");
+        $stmt->bind_param("s", $student_id);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if ($row && password_verify($password, $row['password'])) {
+            $conn->query("DELETE FROM registrations WHERE studentID = '$student_id'");
+            $conn->query("DELETE FROM club_members WHERE studentID = '$student_id'");
+            $conn->query("DELETE FROM club_notify WHERE studentID = '$student_id'");
+            $conn->query("DELETE FROM event_feedback WHERE studentID = '$student_id'");
+            $conn->query("DELETE FROM waiting_list WHERE studentID = '$student_id'");
+            $conn->query("DELETE FROM student_notifications WHERE studentID = '$student_id'");
+            $conn->query("DELETE FROM event_reminders_sent WHERE studentID = '$student_id'");
+
+            $del = $conn->prepare("DELETE FROM students WHERE studentID = ?");
+            $del->bind_param("s", $student_id);
+            $del->execute();
+            $del->close();
+
+            session_destroy();
+            header("Location: StudentLogin.php?deleted=1");
+            exit();
+        } else {
+            $deleteMsg = 'Incorrect password. Account was not deleted.';
+        }
+    }
+
     session_write_close();
 
     $query = "SELECT name, email FROM students WHERE studentID = ?";
@@ -138,6 +172,31 @@
                     <button type="submit" class="save-btn">Save</button>
                 </div>
             </form>
+
+            <div class="dashed-line" style="margin:30px 0;"></div>
+
+            <section>
+                <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px;">Deleting your account will permanently remove all your data (registrations, club memberships, feedback). This cannot be undone.</p>
+
+                <?php if ($deleteMsg): ?>
+                    <div style="background:var(--red-light);color:var(--red);border:1px solid rgba(237,28,36,0.2);padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+                        <?php echo htmlspecialchars($deleteMsg); ?>
+                    </div>
+                <?php endif; ?>
+
+                <form method="POST" onsubmit="return confirm('Are you sure you want to permanently delete your account? This action cannot be undone.');">
+                    <div class="form-group">
+                        <label>Enter your password to confirm deletion:</label>
+                        <div class="password-wrapper">
+                            <input type="password" name="password" id="delete_password" required>
+                            <svg id="eye_icon_3" class="eye-icon" width="24" height="24" onclick="togglePassword('delete_password', 'eye_icon_3')" viewBox="0 0 24 24">
+                                <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <button type="submit" name="delete_account" class="btn-danger-outline">Delete My Account</button>
+                </form>
+            </section>
         </div>
     </main>
 </body>

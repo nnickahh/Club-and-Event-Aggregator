@@ -270,7 +270,7 @@
         die("Event not found.");
     }
 
-    $period = getEventPeriod($event['eventDate'], $event['eventEndDate'] ?? null, date('Y-m-d'));
+    $period = getEventPeriod($event['eventDate'], $event['eventEndDate'] ?? null, date('Y-m-d'), $event['eventTime'] ?? null, $event['eventEndTime'] ?? null);
     $isOngoing = $period === 'ongoing' && $event['status'] === 'approved';
     $isUpcoming = $period === 'upcoming' && $event['status'] === 'approved';
     $isPending = $event['status'] === 'pending';

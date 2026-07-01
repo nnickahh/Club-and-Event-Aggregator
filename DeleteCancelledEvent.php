@@ -14,10 +14,10 @@
     try {
         if ($role === 'admin') {
             $adminID = $_SESSION['admin_id'] ?? '';
-            $eventStmt = $conn->prepare("SELECT eventID, eventTitle FROM events WHERE eventID = ? AND adminID = ? AND status = 'cancelled'");
+            $eventStmt = $conn->prepare("SELECT eventID, eventTitle FROM events WHERE eventID = ? AND adminID = ? AND (status IN ('cancelled','ended') OR (status = 'approved' AND COALESCE(eventEndDate, eventDate) < CURDATE()))");
             $eventStmt->bind_param("is", $eventID, $adminID);
         } else {
-            $eventStmt = $conn->prepare("SELECT eventID, eventTitle FROM events WHERE eventID = ? AND status = 'cancelled'");
+            $eventStmt = $conn->prepare("SELECT eventID, eventTitle FROM events WHERE eventID = ? AND (status IN ('cancelled','ended') OR (status = 'approved' AND COALESCE(eventEndDate, eventDate) < CURDATE()))");
             $eventStmt->bind_param("i", $eventID);
         }
 
@@ -26,14 +26,14 @@
         $eventStmt->close();
 
         if (!$event) {
-            $_SESSION['flash_message'] = 'Only cancelled events can be deleted.';
+            $_SESSION['flash_message'] = 'Event not found or cannot be deleted.';
             header("Location: " . $redirect);
             exit();
         }
 
         $conn->begin_transaction();
 
-        $tables = ['registrations', 'waiting_list', 'student_notifications', 'notifications', 'moderator_notifications'];
+        $tables = ['registrations', 'waiting_list', 'student_notifications', 'notifications', 'moderator_notifications', 'event_feedback', 'event_reminders_sent'];
         foreach ($tables as $table) {
             $stmt = $conn->prepare("DELETE FROM $table WHERE eventID = ?");
             $stmt->bind_param("i", $eventID);
@@ -41,7 +41,7 @@
             $stmt->close();
         }
 
-        $deleteEvent = $conn->prepare("DELETE FROM events WHERE eventID = ? AND status = 'cancelled'");
+        $deleteEvent = $conn->prepare("DELETE FROM events WHERE eventID = ?");
         $deleteEvent->bind_param("i", $eventID);
         $deleteEvent->execute();
         $deleted = $deleteEvent->affected_rows > 0;
@@ -49,7 +49,7 @@
 
         $conn->commit();
 
-        $_SESSION['flash_message'] = $deleted ? 'Cancelled event record deleted.' : 'Event record could not be deleted.';
+        $_SESSION['flash_message'] = $deleted ? 'Event record deleted successfully.' : 'Event record could not be deleted.';
     } catch (mysqli_sql_exception $e) {
         error_log('DeleteCancelledEvent DB error: ' . $e->getMessage());
         try { $conn->rollback(); } catch (Throwable $rollbackError) {}

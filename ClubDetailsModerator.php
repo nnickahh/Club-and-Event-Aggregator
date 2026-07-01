@@ -148,7 +148,7 @@
     $upcomingEvents = [];
     foreach ($allEvents as $ev) {
         if ($ev['status'] === 'approved') {
-            $p = getEventPeriod($ev['eventDate'], $ev['eventEndDate'] ?? null, $currentDate);
+            $p = getEventPeriod($ev['eventDate'], $ev['eventEndDate'] ?? null, $currentDate, $ev['eventTime'] ?? null, $ev['eventEndTime'] ?? null);
             if ($p === 'ongoing') $ongoingEvents[] = $ev;
             elseif ($p === 'upcoming') $upcomingEvents[] = $ev;
         }

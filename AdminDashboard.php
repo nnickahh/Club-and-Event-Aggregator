@@ -91,7 +91,6 @@
     $completedEvents = [];
     $cancelledEvents = [];
     $currentDate = date('Y-m-d');
-    $weekEnd = date('Y-m-d', strtotime('sunday this week'));
 
     if ($result && $result->num_rows > 0) {
         while($row = $result->fetch_assoc()) {
@@ -99,15 +98,10 @@
             if ($status === 'pending') {
                 $pendingEvents[] = $row;
             } elseif ($status === 'approved') {
-                $p = getEventPeriod($row['eventDate'], $row['eventEndDate'] ?? null, $currentDate);
+                $p = getEventPeriod($row['eventDate'], $row['eventEndDate'] ?? null, $currentDate, $row['eventTime'] ?? null, $row['eventEndTime'] ?? null);
                 if ($p === 'ongoing') {
                     $ongoingEvents[] = $row;
                 } elseif ($p === 'upcoming') {
-                    if (($row['recurrence_type'] ?? '') === 'weekly' && !empty($row['recurrence_group_id'])) {
-                        if ($row['eventDate'] > $weekEnd) {
-                            continue;
-                        }
-                    }
                     $upcomingEvents[] = $row;
                 } else {
                     $completedEvents[] = $row;
@@ -325,9 +319,15 @@
         <section class="event-grid">
             <?php if (!empty($completedEvents)): ?>
                 <?php foreach($completedEvents as $event): ?>
-                    <article class="event-card event-card-completed event-card-cancelled"> 
-                        <div>
+                    <article class="event-card event-card-completed event-card-cancelled" style="position:relative;"> 
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <span class="tag">Completed</span>
+                            <form method="POST" action="DeleteCancelledEvent.php" onsubmit="return confirm('Permanently delete this completed event and all its data? This cannot be undone.');">
+                                <input type="hidden" name="event_id" value="<?php echo (int)$event['eventID']; ?>">
+                                <button type="submit" class="btn-delete-sm" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:600;padding:2px 6px;">&times; Delete</button>
+                            </form>
+                        </div>
+                        <div>
                             <?php if (!empty($event['eventImage'])): ?>
                                 <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event image" class="img-event-card-dim">
                             <?php endif; ?>
