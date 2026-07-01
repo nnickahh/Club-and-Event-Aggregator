@@ -17,7 +17,7 @@
     if (isset($_POST["submit"])) {
         $fullname = trim($_POST["fullname"]);
         $admin_id = trim($_POST["staff_id"]); 
-        $club_name = trim($_POST["club_name"]);
+        $clubName = trim($_POST["clubName"]);
         $club_email = trim($_POST["club_email"]);
         $password = $_POST["password"];
         $confirm_password = $_POST["confirm_password"];
@@ -45,7 +45,7 @@
         else {
             // 2. Check duplicate values separately so the user knows what to fix.
             $check_stmt = $conn->prepare("SELECT adminID, clubName, clubEmail FROM admins WHERE adminID = ? OR clubName = ? OR clubEmail = ?");
-            $check_stmt->bind_param("sss", $admin_id, $club_name, $club_email);
+            $check_stmt->bind_param("sss", $admin_id, $clubName, $club_email);
             $check_stmt->execute();
             $check_result = $check_stmt->get_result();
 
@@ -58,7 +58,7 @@
                     if (strcasecmp($existing['adminID'], $admin_id) === 0) {
                         $id_exists = true;
                     }
-                    if (strcasecmp($existing['clubName'], $club_name) === 0) {
+                    if (strcasecmp($existing['clubName'], $clubName) === 0) {
                         $club_exists = true;
                     }
                     if (strcasecmp($existing['clubEmail'], $club_email) === 0) {
@@ -89,17 +89,17 @@
                 $insert_stmt = $conn->prepare("INSERT INTO admins (name, adminID, clubName, clubEmail, password, security_question, security_answer, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 
                 if ($insert_stmt) {
-                    $insert_stmt->bind_param("ssssssss", $fullname, $admin_id, $club_name, $club_email, $hashed_password, $security_question, $hashed_answer, $status);
+                    $insert_stmt->bind_param("ssssssss", $fullname, $admin_id, $clubName, $club_email, $hashed_password, $security_question, $hashed_answer, $status);
                     
                     if ($insert_stmt->execute()) {
                         // Notify moderators
-                        $modMsg = "New club registration pending review: " . $club_name;
+                        $modMsg = "New club registration pending review: " . $clubName;
                         $modStmt = $conn->prepare("INSERT INTO moderator_notifications (message) VALUES (?)");
                         $modStmt->bind_param("s", $modMsg);
                         $modStmt->execute();
                         $modStmt->close();
                         // Store club name in session to show on the success page
-                        $_SESSION['temp_club_name'] = $club_name;
+                        $_SESSION['temp_club_name'] = $clubName;
                         header("Location: PendingApproval.php");
                         exit();
                     } else {
@@ -172,7 +172,7 @@
             
             <div class="form-group">
                 <label>Club Name :</label>
-                <input type="text" name="club_name" placeholder="e.g. INTI Badminton Club" required value="<?php echo isset($_POST['club_name']) ? htmlspecialchars($_POST['club_name']) : ''; ?>">
+                <input type="text" name="clubName" placeholder="e.g. INTI Badminton Club" required value="<?php echo isset($_POST['clubName']) ? htmlspecialchars($_POST['clubName']) : ''; ?>">
             </div>
             
             <div class="form-group">

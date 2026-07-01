@@ -22,6 +22,11 @@
     }
     session_write_close();
 
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        header("Location: ProfileSettings.php");
+        exit();
+    }
+
     $student_id = $_SESSION['student_id'];
         $current_password = $_POST['current_password'];
         $new_password = $_POST['new_password'];
@@ -76,8 +81,4 @@
             echo "<script>alert('Something went wrong. Please try again.'); window.location.href='ProfileSettings.php';</script>";
             exit();
         }
-    } else {
-        header("Location: ProfileSettings.php");
-        exit();
-    }
 ?>

@@ -27,12 +27,12 @@
         }
 
         $studentID = $nextInLine['studentID'];
-        $paymentMethod = 'cash';
-        $paymentStatus = 'unpaid';
-        $paymentReceipt = null;
+        $payment_method = 'cash';
+        $payment_status = 'unpaid';
+        $payment_receipt = null;
 
         $insertStmt = $conn->prepare("INSERT IGNORE INTO registrations (studentID, eventID, payment_method, payment_status, payment_receipt) VALUES (?, ?, ?, ?, ?)");
-        $insertStmt->bind_param("sisss", $studentID, $eventID, $paymentMethod, $paymentStatus, $paymentReceipt);
+        $insertStmt->bind_param("sisss", $studentID, $eventID, $payment_method, $payment_status, $payment_receipt);
         $insertStmt->execute();
         $promoted = $insertStmt->affected_rows > 0;
         $insertStmt->close();

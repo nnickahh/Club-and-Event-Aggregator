@@ -26,15 +26,21 @@
 
         try {
             if ($action === 'approve') {
-                $stmt = $conn->prepare("UPDATE events SET status = 'approved', decline_reason = NULL WHERE eventID = ?");
-                $stmt->bind_param("i", $eventID);
-                $stmt->execute();
-                // Notify subscribed students
-                $eStmt = $conn->prepare("SELECT eventTitle, adminID FROM events WHERE eventID = ?");
+                $eStmt = $conn->prepare("SELECT eventTitle, adminID, recurrence_group_id FROM events WHERE eventID = ?");
                 $eStmt->bind_param("i", $eventID);
                 $eStmt->execute();
                 $eRow = $eStmt->get_result()->fetch_assoc();
                 $eStmt->close();
+                $isGroupedEvent = $eRow && !empty($eRow['recurrence_group_id']);
+                if ($isGroupedEvent) {
+                    $stmt = $conn->prepare("UPDATE events SET status = 'approved', decline_reason = NULL WHERE recurrence_group_id = ?");
+                    $stmt->bind_param("s", $eRow['recurrence_group_id']);
+                } else {
+                    $stmt = $conn->prepare("UPDATE events SET status = 'approved', decline_reason = NULL WHERE eventID = ?");
+                    $stmt->bind_param("i", $eventID);
+                }
+                $stmt->execute();
+                // Notify subscribed students
                 if ($eRow) {
                     $clubStmt = $conn->prepare("SELECT a.clubName, c.clubID FROM admins a LEFT JOIN clubs c ON a.adminID = c.adminID WHERE a.adminID = ?");
                     $clubStmt->bind_param("s", $eRow['adminID']);
@@ -48,6 +54,9 @@
                     $subStmt->execute();
                     $subResult = $subStmt->get_result();
                     $msg = $clubName . ' posted a new event: ' . $eRow['eventTitle'];
+                    if ($isGroupedEvent) {
+                        $msg = $clubName . ' posted a new recurring activity: ' . $eRow['eventTitle'];
+                    }
                     $notifStmt = $conn->prepare("INSERT INTO student_notifications (studentID, message, eventID, clubID) VALUES (?, ?, ?, ?)");
                     while ($sub = $subResult->fetch_assoc()) {
                         $notifStmt->bind_param("ssii", $sub['studentID'], $msg, $eventID, $clubID);
@@ -56,38 +65,43 @@
                     $notifStmt->close();
                     $subStmt->close();
 
-                    $adminMsg = $eRow['eventTitle'] . ' has been approved/re-approved by the moderator.';
+                    $adminMsg = $eRow['eventTitle'] . ($isGroupedEvent ? ' recurring activity has' : ' has') . ' been approved/re-approved by the moderator.';
                     $adminStmt = $conn->prepare("INSERT INTO notifications (adminID, message, eventID) VALUES (?, ?, ?)");
                     $adminStmt->bind_param("ssi", $eRow['adminID'], $adminMsg, $eventID);
                     $adminStmt->execute();
                     $adminStmt->close();
 	                }
 	                logModeratorActivity($conn, $moderatorID, $moderatorName, 'approved', 'event', $eventID, $eRow['eventTitle'] ?? 'Event', null);
-	                $message = 'Event has been approved successfully.';
+	                $message = $isGroupedEvent ? 'Recurring activity has been approved successfully.' : 'Event has been approved successfully.';
 	                $msgType = 'success';
 	            } elseif ($action === 'decline') {
-                $declineReason = trim($_POST['decline_reason'] ?? '');
-                $eStmt = $conn->prepare("SELECT eventTitle, adminID FROM events WHERE eventID = ?");
+                $decline_reason = trim($_POST['decline_reason'] ?? '');
+                $eStmt = $conn->prepare("SELECT eventTitle, adminID, recurrence_group_id FROM events WHERE eventID = ?");
                 $eStmt->bind_param("i", $eventID);
                 $eStmt->execute();
                 $eRow = $eStmt->get_result()->fetch_assoc();
                 $eStmt->close();
                 if ($eRow) {
                     // Save decline reason and keep as pending (admin can resubmit)
-                    $rStmt = $conn->prepare("UPDATE events SET status = 'pending', decline_reason = ? WHERE eventID = ?");
-                    $rStmt->bind_param("si", $declineReason, $eventID);
+                    if (!empty($eRow['recurrence_group_id'])) {
+                        $rStmt = $conn->prepare("UPDATE events SET status = 'pending', decline_reason = ? WHERE recurrence_group_id = ?");
+                        $rStmt->bind_param("ss", $decline_reason, $eRow['recurrence_group_id']);
+                    } else {
+                        $rStmt = $conn->prepare("UPDATE events SET status = 'pending', decline_reason = ? WHERE eventID = ?");
+                        $rStmt->bind_param("si", $decline_reason, $eventID);
+                    }
                     $rStmt->execute();
                     $rStmt->close();
                     // Notify admin
-                    $reasonText = $declineReason ? " Reason: " . $declineReason : '';
-                    $adminMsg = $eRow['eventTitle'] . ' requires changes.' . $reasonText;
+                    $reasonText = $decline_reason ? " Reason: " . $decline_reason : '';
+                    $adminMsg = $eRow['eventTitle'] . (!empty($eRow['recurrence_group_id']) ? ' recurring activity requires changes.' : ' requires changes.') . $reasonText;
                     $aStmt = $conn->prepare("INSERT INTO notifications (adminID, message, eventID) VALUES (?, ?, ?)");
                     $aStmt->bind_param("ssi", $eRow['adminID'], $adminMsg, $eventID);
 	                    $aStmt->execute();
 	                    $aStmt->close();
 	                }
-	                logModeratorActivity($conn, $moderatorID, $moderatorName, 'declined', 'event', $eventID, $eRow['eventTitle'] ?? 'Event', $declineReason);
-	                $message = 'Event has been declined. The admin can resubmit after making changes.';
+	                logModeratorActivity($conn, $moderatorID, $moderatorName, 'declined', 'event', $eventID, $eRow['eventTitle'] ?? 'Event', $decline_reason);
+	                $message = !empty($eRow['recurrence_group_id']) ? 'Recurring activity has been declined. The admin can resubmit after making changes.' : 'Event has been declined. The admin can resubmit after making changes.';
 	                $msgType = 'success';
 	            } elseif ($action === 'update') {
                 $title = $_POST['eventTitle'] ?? '';
@@ -168,7 +182,7 @@
 
     $event = null;
     try {
-        $stmt = $conn->prepare("SELECT e.*, a.clubName AS club_name, a.name AS admin_name, a.clubEmail AS club_email FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.eventID = ?");
+        $stmt = $conn->prepare("SELECT e.*, a.clubName AS clubName, a.name AS admin_name, a.clubEmail AS club_email FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.eventID = ?");
         $stmt->bind_param("i", $eventID);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -191,6 +205,23 @@
 
     $today = date('Y-m-d');
     $eventStatus = $event['status'] ?? 'pending';
+    $groupStartDate = $event['eventDate'];
+    $groupEndDate = $event['eventEndDate'] ?: $event['eventDate'];
+    $groupSessionCount = 1;
+    $isRecurringEvent = !empty($event['recurrence_group_id']);
+
+    if ($isRecurringEvent) {
+        $groupStmt = $conn->prepare("SELECT MIN(eventDate) AS start_date, MAX(eventDate) AS end_date, COUNT(*) AS session_count FROM events WHERE recurrence_group_id = ?");
+        $groupStmt->bind_param("s", $event['recurrence_group_id']);
+        $groupStmt->execute();
+        $groupRow = $groupStmt->get_result()->fetch_assoc();
+        $groupStmt->close();
+        if ($groupRow) {
+            $groupStartDate = $groupRow['start_date'] ?: $groupStartDate;
+            $groupEndDate = $groupRow['end_date'] ?: $groupEndDate;
+            $groupSessionCount = (int)($groupRow['session_count'] ?? 1);
+        }
+    }
 
     // Fetch waiting list
     $waitStmt = $conn->prepare("SELECT w.waitID, w.studentID, w.registered_at, s.name, s.email FROM waiting_list w JOIN students s ON w.studentID = s.studentID WHERE w.eventID = ? ORDER BY w.registered_at ASC");
@@ -207,10 +238,11 @@
 	    $regCntStmt->close();
 
 	    $eventConflicts = [];
-	    $conflictStartDate = $event['eventDate'];
-	    $conflictEndDate = $event['eventEndDate'] ?: $event['eventDate'];
+	    $conflictStartDate = $groupStartDate;
+	    $conflictEndDate = $groupEndDate;
 	    $conflictStartTime = $event['eventTime'] ?: '00:00:00';
 	    $conflictEndTime = $event['eventEndTime'] ?: $event['eventTime'];
+        $currentRecurrenceGroupID = $event['recurrence_group_id'] ?? '';
 	    $conflictStmt = $conn->prepare("
 	        SELECT e.eventID, e.eventTitle, e.eventDate, e.eventEndDate, e.eventTime, e.eventEndTime, a.clubName
 	        FROM events e
@@ -222,10 +254,16 @@
 	          AND COALESCE(e.eventEndDate, e.eventDate) >= ?
 	          AND e.eventTime <= ?
 	          AND COALESCE(e.eventEndTime, e.eventTime) >= ?
+              AND (
+                  ? = ''
+                  OR e.recurrence_group_id IS NULL
+                  OR e.recurrence_group_id = ''
+                  OR e.recurrence_group_id <> ?
+              )
 	        ORDER BY e.eventDate ASC, e.eventTime ASC
 	        LIMIT 5
 	    ");
-	    $conflictStmt->bind_param("isssss", $eventID, $event['venue'], $conflictEndDate, $conflictStartDate, $conflictEndTime, $conflictStartTime);
+	    $conflictStmt->bind_param("isssssss", $eventID, $event['venue'], $conflictEndDate, $conflictStartDate, $conflictEndTime, $conflictStartTime, $currentRecurrenceGroupID, $currentRecurrenceGroupID);
 	    $conflictStmt->execute();
 	    $eventConflicts = $conflictStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 	    $conflictStmt->close();
@@ -255,16 +293,16 @@
             <?php if (!empty($event['eventImage'])): ?>
                 <img src="<?php echo htmlspecialchars($event['eventImage']); ?>" alt="Event poster" class="img-event-detail clickable-poster" onclick="openEventPosterViewer(this.src)">
             <?php endif; ?>
-            <a href="ClubDetailsModerator.php?id=<?php echo urlencode($event['adminID']); ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['club_name'] ?? 'Unknown Club'); ?></span></a>
+            <a href="ClubDetailsModerator.php?id=<?php echo urlencode($event['adminID']); ?>" class="no-deco"><span class="tag tag-club"><?php echo htmlspecialchars($event['clubName'] ?? 'Unknown Club'); ?></span></a>
 
             <?php if ($eventStatus === 'pending'): ?>
-                <span class="mod-pending-badge mt-10"><span class="mod-badge-dot"></span>Pending review</span>
+                <span class="mod-pending-badge mt-10"><span class="mod-badge-dot"></span><?php echo $isRecurringEvent ? 'Recurring request' : 'Pending review'; ?></span>
             <?php elseif ($eventStatus === 'declined'): ?>
                 <span class="mod-status-tag declined mt-10">Declined</span>
             <?php else: ?>
                 <span class="mod-status-tag approved mt-10">
                     <?php
-                        $p = getEventPeriod($event['eventDate'], $event['eventEndDate'] ?? null, $today);
+                        $p = getEventPeriod($groupStartDate, $groupEndDate, $today);
                         if ($p === 'ongoing') echo 'Ongoing';
                         elseif ($p === 'upcoming') echo 'Upcoming';
                         else echo 'Completed';
@@ -324,12 +362,20 @@
                 <h1 class="event-detail-title"><?php echo htmlspecialchars($event['eventTitle']); ?></h1>
 
                 <div class="event-meta event-meta-lg">
-                    <p><strong>Date:</strong> <?php echo formatDateRange($event['eventDate'], $event['eventEndDate'] ?? null); ?></p>
+                    <p>
+                        <strong>Date:</strong> <?php echo formatDateRange($groupStartDate, $groupEndDate); ?>
+                        <?php if ($isRecurringEvent): ?>
+                            <span class="text-xs-muted"> · <?php echo $groupSessionCount; ?> sessions</span>
+                        <?php endif; ?>
+                    </p>
+                    <?php if ($isRecurringEvent): ?>
+                        <p><strong>Activity Type:</strong> <?php echo ucfirst(htmlspecialchars($event['recurrence_type'] ?? 'Recurring')); ?> activity</p>
+                    <?php endif; ?>
                     <p><strong>Time:</strong> <?php echo date('h:iA', strtotime($event['eventTime'])); ?><?php if (!empty($event['eventEndTime'])): ?> — <?php echo date('h:iA', strtotime($event['eventEndTime'])); ?><?php endif; ?></p>
                     <p><strong>Venue:</strong> <?php echo htmlspecialchars($event['venue']); ?></p>
                     <p><strong>Capacity:</strong> <?php echo htmlspecialchars($event['capacity']); ?> seats</p>
                     <p><strong>Fee:</strong> <?php $fee = floatval($event['fee'] ?? 0); echo $fee > 0 ? 'RM' . number_format($fee, 2) : 'Free'; ?></p>
-                    <p><strong>Club:</strong> <?php echo htmlspecialchars($event['club_name'] ?? 'Unknown'); ?></p>
+                    <p><strong>Club:</strong> <?php echo htmlspecialchars($event['clubName'] ?? 'Unknown'); ?></p>
                     <p><strong>Club Admin:</strong> <?php echo htmlspecialchars($event['admin_name'] ?? 'Unknown'); ?></p>
                     <?php $fee = floatval($event['fee'] ?? 0); ?>
                     <?php if ($fee > 0 && !empty($event['payment_methods'])): ?>
@@ -439,9 +485,9 @@
                     <?php if ($eventStatus === 'pending'): ?>
                         <form method="POST">
                             <input type="hidden" name="action" value="approve">
-                            <button type="submit" class="btn-approve">Approve Event</button>
+                            <button type="submit" class="btn-approve"><?php echo $isRecurringEvent ? 'Approve Activity' : 'Approve Event'; ?></button>
                         </form>
-                        <button type="button" class="btn-decline" onclick="openDeclineModal()">Decline Event</button>
+                        <button type="button" class="btn-decline" onclick="openDeclineModal()"><?php echo $isRecurringEvent ? 'Decline Activity' : 'Decline Event'; ?></button>
                     <?php elseif ($eventStatus === 'approved'): ?>
                         <a href="EventDetailsModerator.php?id=<?php echo $eventID; ?>&edit=1" class="btn-edit">Edit Event</a>
                         <button type="button" class="btn-delete" onclick="openDeleteModal()">Delete Event</button>

@@ -56,18 +56,18 @@
     }
 
     function collectPaymentSettings($event) {
-        $paymentMethods = !empty($_POST['payment_methods']) ? implode(',', $_POST['payment_methods']) : null;
-        $tngPhone = null;
-        $tngQr = null;
-        $bankDetails = null;
+        $payment_methods = !empty($_POST['payment_methods']) ? implode(',', $_POST['payment_methods']) : null;
+        $tng_phone = null;
+        $tng_qr = null;
+        $bank_details = null;
 
-        if ($paymentMethods && strpos($paymentMethods, 'tng') !== false) {
-            $tngPhone = !empty(trim($_POST['tng_phone'] ?? '')) ? trim($_POST['tng_phone']) : null;
-            $tngQr = $event['tng_qr'] ?? null;
-            if ($tngPhone === null) {
+        if ($payment_methods && strpos($payment_methods, 'tng') !== false) {
+            $tng_phone = !empty(trim($_POST['tng_phone'] ?? '')) ? trim($_POST['tng_phone']) : null;
+            $tng_qr = $event['tng_qr'] ?? null;
+            if ($tng_phone === null) {
                 return [null, null, null, null, 'TNG phone number is required.'];
             }
-            if (!ctype_digit($tngPhone)) {
+            if (!ctype_digit($tng_phone)) {
                 return [null, null, null, null, 'Only numbers allowed.'];
             }
 
@@ -79,12 +79,12 @@
                 $qrType = strtolower(pathinfo($relativeQrPath, PATHINFO_EXTENSION));
 
                 if ($qrDir && in_array($qrType, ['jpg','jpeg','png','gif','webp'], true) && move_uploaded_file($_FILES['tng_qr']['tmp_name'], $qrPath)) {
-                    $tngQr = $relativeQrPath;
+                    $tng_qr = $relativeQrPath;
                 }
             }
         }
 
-        if ($paymentMethods && strpos($paymentMethods, 'bank_in') !== false) {
+        if ($payment_methods && strpos($payment_methods, 'bank_in') !== false) {
             $bankData = [];
             if (empty(trim($_POST['bank_name'] ?? ''))) {
                 return [null, null, null, null, 'Bank name is required.'];
@@ -103,10 +103,10 @@
                 return [null, null, null, null, 'Account holder name is required.'];
             }
             $bankData['bank_holder'] = trim($_POST['bank_holder']);
-            if (!empty($bankData)) $bankDetails = json_encode($bankData);
+            if (!empty($bankData)) $bank_details = json_encode($bankData);
         }
 
-        return [$paymentMethods, $tngPhone, $tngQr, $bankDetails, null];
+        return [$payment_methods, $tng_phone, $tng_qr, $bank_details, null];
     }
 
     // Handle AJAX payment toggle (before rendering)
@@ -140,8 +140,8 @@
         $newSid = trim($_POST['new_student_id'] ?? '');
         $newName = trim($_POST['new_name'] ?? '');
         $newEmail = trim($_POST['new_email'] ?? '');
-        $paymentMethod = $_POST['payment_method'] ?? '';
-        $paymentStatus = $_POST['payment_status'] ?? 'unpaid';
+        $payment_method = $_POST['payment_method'] ?? '';
+        $payment_status = $_POST['payment_status'] ?? 'unpaid';
         if ($newSid && $newName && $newEmail) {
             // Check student exists
             $check = $conn->prepare("SELECT studentID FROM students WHERE studentID = ?");
@@ -171,7 +171,7 @@
             $dup->close();
             if (!$already) {
                 $ins = $conn->prepare("INSERT INTO registrations (studentID, eventID, payment_method, payment_status) VALUES (?, ?, ?, ?)");
-                $ins->bind_param("siss", $newSid, $eventID, $paymentMethod, $paymentStatus);
+                $ins->bind_param("siss", $newSid, $eventID, $payment_method, $payment_status);
                 $ins->execute();
                 $ins->close();
             }
@@ -298,7 +298,7 @@
         $newCapacity = intval($_POST['capacity'] ?? 0);
         $newDesc = trim($_POST['description'] ?? '');
         $newFee = !empty(trim($_POST['fee'] ?? '')) ? floatval($_POST['fee']) : 0.00;
-        [$paymentMethods, $tngPhone, $tngQr, $bankDetails, $paymentError] = collectPaymentSettings($event);
+        [$payment_methods, $tng_phone, $tng_qr, $bank_details, $paymentError] = collectPaymentSettings($event);
         $newEventImage = $event['eventImage'] ?? null;
         $posterError = null;
         if (!$paymentError) {
@@ -309,7 +309,7 @@
             $editMessage = $paymentError ?: $posterError;
         } elseif ($newTitle && $newDate && $newTime && $newVenue && $newCapacity) {
             $upd = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=?, eventImage=?, fee=?, payment_methods=?, tng_phone=?, tng_qr=?, bank_details=? WHERE eventID=? AND adminID=?");
-            $upd->bind_param("ssssssissdssssis", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newEventImage, $newFee, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $eventID, $adminID);
+            $upd->bind_param("ssssssissdssssis", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newEventImage, $newFee, $payment_methods, $tng_phone, $tng_qr, $bank_details, $eventID, $adminID);
             $upd->execute();
             $upd->close();
             $conn->query("UPDATE events SET decline_reason=NULL WHERE eventID=$eventID");
@@ -324,10 +324,10 @@
             $event['description'] = $newDesc;
             $event['eventImage'] = $newEventImage;
             $event['fee'] = $newFee;
-            $event['payment_methods'] = $paymentMethods;
-            $event['tng_phone'] = $tngPhone;
-            $event['tng_qr'] = $tngQr;
-            $event['bank_details'] = $bankDetails;
+            $event['payment_methods'] = $payment_methods;
+            $event['tng_phone'] = $tng_phone;
+            $event['tng_qr'] = $tng_qr;
+            $event['bank_details'] = $bank_details;
             $event['decline_reason'] = null;
             $fee = $newFee;
         }
@@ -344,7 +344,7 @@
         $newCapacity = intval($_POST['capacity'] ?? 0);
         $newDesc = trim($_POST['description'] ?? '');
         $newFee = !empty(trim($_POST['fee'] ?? '')) ? floatval($_POST['fee']) : 0.00;
-        [$paymentMethods, $tngPhone, $tngQr, $bankDetails, $paymentError] = collectPaymentSettings($event);
+        [$payment_methods, $tng_phone, $tng_qr, $bank_details, $paymentError] = collectPaymentSettings($event);
         $newEventImage = $event['eventImage'] ?? null;
         $posterError = null;
         if (!$paymentError) {
@@ -355,7 +355,7 @@
             $editMessage = $paymentError ?: $posterError;
         } elseif ($newTitle && $newDate && $newTime && $newVenue && $newCapacity) {
             $upd = $conn->prepare("UPDATE events SET eventTitle=?, eventDate=?, eventEndDate=?, eventTime=?, eventEndTime=?, venue=?, capacity=?, description=?, eventImage=?, fee=?, payment_methods=?, tng_phone=?, tng_qr=?, bank_details=?, status='pending' WHERE eventID=? AND adminID=?");
-            $upd->bind_param("ssssssissdssssis", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newEventImage, $newFee, $paymentMethods, $tngPhone, $tngQr, $bankDetails, $eventID, $adminID);
+            $upd->bind_param("ssssssissdssssis", $newTitle, $newDate, $newEndDate, $newTime, $newEndTime, $newVenue, $newCapacity, $newDesc, $newEventImage, $newFee, $payment_methods, $tng_phone, $tng_qr, $bank_details, $eventID, $adminID);
             $upd->execute();
             $upd->close();
             $conn->query("UPDATE events SET decline_reason=NULL WHERE eventID=$eventID");
@@ -486,10 +486,10 @@
     ");
     $feedbackStmt->bind_param("i", $eventID);
     $feedbackStmt->execute();
-    $eventFeedback = $feedbackStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $event_feedback = $feedbackStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $feedbackStmt->close();
-    $reviewCount = count($eventFeedback);
-    $averageRating = $reviewCount > 0 ? array_sum(array_map(fn($f) => (int)$f['rating'], $eventFeedback)) / $reviewCount : 0;
+    $reviewCount = count($event_feedback);
+    $averageRating = $reviewCount > 0 ? array_sum(array_map(fn($f) => (int)$f['rating'], $event_feedback)) / $reviewCount : 0;
 
     $totalRegistered = count($participants);
     if ($totalRegistered > (int)$event['capacity']) {
@@ -734,9 +734,9 @@
                         <span class="admin-review-average"><?php echo number_format($averageRating, 1); ?> / 5 ★</span>
                     <?php endif; ?>
                 </h3>
-                <?php if (!empty($eventFeedback)): ?>
+                <?php if (!empty($event_feedback)): ?>
                     <div class="admin-review-list">
-                        <?php foreach ($eventFeedback as $review): ?>
+                        <?php foreach ($event_feedback as $review): ?>
                             <article class="admin-review-item">
                                 <div class="admin-review-head">
                                     <div>
@@ -800,7 +800,7 @@
                                 ?></td>
                                 <td><?php if ($fee == 0): ?>—<?php else: ?>
                                     <?php
-                                        $paymentMethod = $p['payment_method'] ?? '';
+                                        $payment_method = $p['payment_method'] ?? '';
                                         $isPaid = ($p['payment_status'] ?? 'unpaid') === 'paid';
                                         $receipt = $p['payment_receipt'] ?? '';
                                     ?>
@@ -977,16 +977,16 @@
         const bank = document.querySelector('#editForm input[name="payment_methods[]"][value="bank_in"]');
         const tngFields = document.getElementById('editTngFields');
         const bankFields = document.getElementById('editBankFields');
-        const tngPhone = document.querySelector('#editForm input[name="tng_phone"]');
+        const tng_phone = document.querySelector('#editForm input[name="tng_phone"]');
         const bankName = document.querySelector('#editForm input[name="bank_name"]');
         const bankAccount = document.querySelector('#editForm input[name="bank_account"]');
         const bankHolder = document.querySelector('#editForm input[name="bank_holder"]');
 
         if (tngFields) tngFields.style.display = tng && tng.checked ? 'block' : 'none';
         if (bankFields) bankFields.style.display = bank && bank.checked ? 'block' : 'none';
-        if (tngPhone) {
-            tngPhone.required = !!(tng && tng.checked);
-            if (!tngPhone.required) tngPhone.setCustomValidity('');
+        if (tng_phone) {
+            tng_phone.required = !!(tng && tng.checked);
+            if (!tng_phone.required) tng_phone.setCustomValidity('');
         }
         if (bankName) {
             bankName.required = !!(bank && bank.checked);

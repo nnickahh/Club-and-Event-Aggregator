@@ -38,7 +38,7 @@
     $adminStmt->execute();
     $adminData = $adminStmt->get_result()->fetch_assoc();
     $adminStmt->close();
-    $registeredClubName = $adminData['clubName'] ?? ($_SESSION['club_name'] ?? "My Club");
+    $registeredClubName = $adminData['clubName'] ?? ($_SESSION['clubName'] ?? "My Club");
     $registeredClubEmail = $adminData['clubEmail'] ?? "club@inti.edu.my";
 
     // 1. Fetch public presentation metrics from clubs table
@@ -136,7 +136,7 @@
             $eventClubStmt->close();
 
             $message = "<div class='toast-notification success'>✨ Changes saved successfully!</div>";
-            $_SESSION['club_name'] = $clubName;
+            $_SESSION['clubName'] = $clubName;
         } else {
             $message = "<div class='toast-notification error'>❌ Error processing profile adjustments.</div>";
         }
