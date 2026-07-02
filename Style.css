@@ -4874,10 +4874,17 @@ body.is-editing-mode .hide-on-edit {
     gap:12px;
 }
 .past-card {
+    display:flex;
+    align-items:flex-start;
+    gap:16px;
     padding:16px 20px;
     background:#fff;
     border:1px solid #e2e8f0;
     border-radius:12px;
+}
+.past-card-body {
+    flex:1;
+    min-width:0;
 }
 .past-card-top {
     display:flex;
@@ -4890,27 +4897,38 @@ body.is-editing-mode .hide-on-edit {
     font-size:16px;
     color:#0f172a;
 }
-.past-card-badges {
-    display:flex;
-    align-items:flex-start;
-    gap:8px;
-    flex-shrink:0;
-}
-.past-card-badges-right {
+.past-card-side {
     display:flex;
     flex-direction:column;
+    gap:8px;
+    width:130px;
+    flex-shrink:0;
+}
+.past-details-btn {
+    display:flex;
     align-items:center;
-    gap:6px;
+    justify-content:center;
+    padding:6px 12px;
+    border-radius:6px;
+    border:1px solid #d1d5db;
+    background:#fff;
+    color:#374151;
+    font-size:12px;
+    font-weight:600;
+    text-decoration:none;
+}
+.past-details-btn:hover {
+    background:#f3f4f6;
+    border-color:#9ca3af;
 }
 .past-cert-card {
     display:block;
-    padding:6px 10px;
+    padding:8px 10px;
     border-radius:8px;
-    font-size:11px;
+    font-size:12px;
     font-weight:700;
     text-align:center;
     text-decoration:none;
-    white-space:nowrap;
 }
 .past-cert-card.ready {
     background:#fffbeb;
@@ -4925,23 +4943,6 @@ body.is-editing-mode .hide-on-edit {
     border:1px solid #e2e8f0;
     color:#94a3b8;
     cursor:default;
-}
-.past-details-btn {
-    display:inline-flex;
-    align-items:center;
-    padding:4px 12px;
-    border-radius:6px;
-    border:1px solid #d1d5db;
-    background:#fff;
-    color:#374151;
-    font-size:12px;
-    font-weight:600;
-    text-decoration:none;
-    white-space:nowrap;
-}
-.past-details-btn:hover {
-    background:#f3f4f6;
-    border-color:#9ca3af;
 }
 .past-club-link {
     display:inline-flex;
@@ -5135,6 +5136,13 @@ body.is-editing-mode .hide-on-edit {
     .activity-summary-row {
         grid-template-columns:repeat(2, minmax(0, 1fr));
     }
+    .past-card {
+        flex-direction:column;
+    }
+    .past-card-side {
+        flex-direction:row;
+        width:100%;
+    }
 }
 @media (max-width: 680px) {
     .activity-summary-row {
@@ -5150,6 +5158,9 @@ body.is-editing-mode .hide-on-edit {
     .past-feedback-inputs {
         flex-direction:column;
         align-items:stretch;
+    }
+    .past-card-side {
+        flex-direction:column;
     }
 }
 .recent-past-review-card .feedback-panel {
