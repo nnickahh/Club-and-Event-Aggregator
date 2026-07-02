@@ -13,8 +13,7 @@
     // Fetch clubs for filter dropdown (only those with approved events)
     $clubsResult = $conn->query("SELECT DISTINCT a.clubName FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'approved' AND a.clubName IS NOT NULL ORDER BY a.clubName ASC");
 
-    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE ? BETWEEN e.eventDate AND COALESCE(e.eventEndDate, e.eventDate) AND e.status = 'approved' ORDER BY e.eventTime ASC");
-    $ongoingStmt->bind_param("s", $currentDate);
+    $ongoingStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE e.status = 'approved' AND NOW() >= CONCAT(e.eventDate, ' ', COALESCE(e.eventTime, '00:00:00')) AND NOW() <= CONCAT(COALESCE(e.eventEndDate, e.eventDate), ' ', COALESCE(e.eventEndTime, '23:59:59')) ORDER BY e.eventTime ASC");
     $ongoingStmt->execute();
     $ongoingResult = $ongoingStmt->get_result();
     $ongoingStmt->close();

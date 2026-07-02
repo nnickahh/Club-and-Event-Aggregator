@@ -60,6 +60,7 @@
                 <?php endif; ?>
                 <hr class="notif-sep">
                 <a href="ModeratorProfile.php">Profile</a>
+                <a href="CreateModerator.php">Create Moderator</a>
                 <a href="LogOut.php">Sign Out</a>
             </div>
         </div>

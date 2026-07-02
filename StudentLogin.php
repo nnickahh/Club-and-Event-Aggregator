@@ -86,7 +86,7 @@
 <body class="student-login-body">
     <main class="student-login-shell">
         <section class="student-login-visual" aria-label="INTI campus">
-            <img src="assets/inti-campus.jpeg" alt="INTI International College Penang campus">
+            <img src="Image/inti-campus.jpg" alt="INTI International College Penang campus">
             <div class="student-login-visual-copy">
                 <span>INTI Campus Event System</span>
                 <h1>Student Access</h1>
