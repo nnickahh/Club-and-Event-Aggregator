@@ -247,7 +247,7 @@
                                 <?php if ($isPresent): ?>
                                     <a href="Certificate.php?id=<?php echo (int)$row['eventID']; ?>" class="past-cert-card ready">Certificate</a>
                                 <?php else: ?>
-                                    <div class="past-cert-card locked">Certificate Locked</div>
+                                    <div class="past-cert-card locked">Certificate Locked<br>Attendance Required</div>
                                 <?php endif; ?>
                             </div>
                         </article>
