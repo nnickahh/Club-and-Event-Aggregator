@@ -203,12 +203,11 @@
                             <div class="past-card-body">
                                 <div class="past-card-top">
                                     <div>
-                                        <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
+                                        <h4><?php echo htmlspecialchars($row['eventTitle']); ?> <span class="completed-pill">Completed</span></h4>
                                         <?php if (!empty($row['clubName'])): ?>
                                             <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="past-club-link"><?php echo htmlspecialchars($row['clubName']); ?></a>
                                         <?php endif; ?>
                                     </div>
-                                    <span class="completed-pill">Completed</span>
                                 </div>
 
                                 <div class="past-card-meta">
