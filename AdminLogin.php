@@ -76,12 +76,21 @@
     </script>
 </head>
 <body class="student-login-body">
-    <main class="student-login-shell" style="grid-template-columns:1fr;max-width:480px;">
+    <main class="student-login-shell">
+        <section class="student-login-visual" aria-label="INTI campus">
+            <img src="Image/inti-campus.jpg" alt="INTI International College Penang campus">
+            <div class="student-login-visual-copy">
+                <span>INTI Campus Event System</span>
+                <h1>Club Management</h1>
+                <p>Manage your club's events, track registrations, and engage with students.</p>
+            </div>
+        </section>
+
         <section class="student-login-panel">
             <div class="student-login-header">
-                <span class="login-kicker">Club Management</span>
+                <span class="login-kicker">Welcome Back</span>
                 <h2>Admin Login</h2>
-                <p>Sign in with your club's official email to manage events, members, and activities.</p>
+                <p>Sign in with your club's official email to continue.</p>
             </div>
 
             <div class="tabs student-login-tabs">
