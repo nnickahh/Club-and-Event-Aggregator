@@ -66,25 +66,12 @@
               email VARCHAR(255) UNIQUE NOT NULL,
               password VARCHAR(255) NOT NULL,
               status ENUM('active', 'inactive') DEFAULT 'active',
-              security_question VARCHAR(255) DEFAULT NULL,
-              security_answer VARCHAR(255) DEFAULT NULL,
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
             $conn->query($create_sql);
         }
     } catch (mysqli_sql_exception $e) {
         error_log('DB moderator table setup error: ' . $e->getMessage());
-    }
-
-    // Add `security_question` and `security_answer` columns to `moderators` table
-    try {
-        $check = $conn->query("SHOW COLUMNS FROM moderators LIKE 'security_question'");
-        if (!$check || $check->num_rows === 0) {
-            $conn->query("ALTER TABLE moderators ADD COLUMN security_question VARCHAR(255) DEFAULT NULL AFTER password");
-            $conn->query("ALTER TABLE moderators ADD COLUMN security_answer VARCHAR(255) DEFAULT NULL AFTER security_question");
-        }
-    } catch (mysqli_sql_exception $e) {
-        error_log('DB moderators security_question migration error: ' . $e->getMessage());
     }
 
     // Add `status` column to `events` table if it doesn't exist (for moderator approval workflow)
