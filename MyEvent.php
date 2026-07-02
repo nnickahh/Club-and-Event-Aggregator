@@ -92,8 +92,8 @@
 
     // Registered events — separate active (ongoing/upcoming) from completed
     $today = date('Y-m-d');
-    $activeStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE r.studentID = ? AND e.status = 'approved' AND COALESCE(e.eventEndDate, e.eventDate) >= ? ORDER BY e.eventDate ASC");
-    $activeStmt->bind_param("ss", $studentID, $today);
+    $activeStmt = $conn->prepare("SELECT e.*, a.clubName, c.clubID FROM events e JOIN registrations r ON e.eventID = r.eventID LEFT JOIN admins a ON e.adminID = a.adminID LEFT JOIN clubs c ON c.clubID = (SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1) WHERE r.studentID = ? AND e.status = 'approved' AND NOW() <= CONCAT(COALESCE(e.eventEndDate, e.eventDate), ' ', COALESCE(e.eventEndTime, '23:59:59')) ORDER BY e.eventDate ASC");
+    $activeStmt->bind_param("s", $studentID);
     $activeStmt->execute();
     $activeEvents = $activeStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $activeStmt->close();
@@ -114,10 +114,10 @@
             GROUP BY eventID
         ) pc ON pc.eventID = e.eventID
         WHERE r.studentID = ?
-          AND ((e.status = 'approved' AND COALESCE(e.eventEndDate, e.eventDate) < ?) OR e.status = 'ended')
+          AND ((e.status = 'approved' AND NOW() > CONCAT(COALESCE(e.eventEndDate, e.eventDate), ' ', COALESCE(e.eventEndTime, '23:59:59'))) OR e.status = 'ended')
         ORDER BY e.eventDate DESC
     ");
-    $pastStmt->bind_param("ss", $studentID, $today);
+    $pastStmt->bind_param("s", $studentID);
     $pastStmt->execute();
     $pastEvents = $pastStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $pastStmt->close();
