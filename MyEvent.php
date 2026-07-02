@@ -209,7 +209,14 @@
                                 </div>
                                 <div class="past-card-badges">
                                     <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="past-details-btn">Details</a>
-                                    <span class="completed-pill">Completed</span>
+                                    <div class="past-card-badges-right">
+                                        <span class="completed-pill">Completed</span>
+                                        <?php if ($isPresent): ?>
+                                            <a href="Certificate.php?id=<?php echo (int)$row['eventID']; ?>" class="past-cert-card ready">Certificate</a>
+                                        <?php else: ?>
+                                            <div class="past-cert-card locked">Certificate Locked</div>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                             </div>
 
@@ -217,11 +224,6 @@
                                 <span><?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?> • <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> - <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?></span>
                                 <span><?php echo htmlspecialchars($row['venue']); ?></span>
                                 <span class="<?php echo $isPresent ? 'att-present' : 'att-absent'; ?>"><?php echo $isPresent ? 'Present' : 'Absent'; ?></span>
-                                <?php if ($isPresent): ?>
-                                    <a href="Certificate.php?id=<?php echo (int)$row['eventID']; ?>" class="att-present cert-link">Certificate</a>
-                                <?php else: ?>
-                                    <span class="att-absent cert-link">Certificate Locked</span>
-                                <?php endif; ?>
                             </div>
 
                             <div class="past-card-feedback">
