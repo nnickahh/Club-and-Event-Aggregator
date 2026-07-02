@@ -157,8 +157,8 @@ input, button, select, textarea {
 .student-login-panel {
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
-    padding: 36px 48px 52px;
+    justify-content: center;
+    padding: 52px 48px;
 }
 .student-login-header {
     margin-bottom: 18px;
