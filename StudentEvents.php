@@ -9,6 +9,7 @@
     session_write_close();
 
     $currentDate = date('Y-m-d');
+    $weekEnd = date('Y-m-d', strtotime('sunday this week'));
 
     // Fetch clubs for filter dropdown (only those with approved events)
     $clubsResult = $conn->query("SELECT DISTINCT a.clubName FROM events e LEFT JOIN admins a ON e.adminID = a.adminID WHERE e.status = 'approved' AND a.clubName IS NOT NULL ORDER BY a.clubName ASC");
@@ -26,10 +27,11 @@
             SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1
         )
         WHERE e.eventDate > ?
+          AND e.eventDate <= ?
           AND e.status = 'approved'
         ORDER BY e.eventDate ASC
     ");
-    $upcomingStmt->bind_param("s", $currentDate);
+    $upcomingStmt->bind_param("ss", $currentDate, $weekEnd);
     $upcomingStmt->execute();
     $upcomingResult = $upcomingStmt->get_result();
     $upcomingStmt->close();

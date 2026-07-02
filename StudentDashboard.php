@@ -9,6 +9,7 @@
     session_write_close();
 
     $currentDate = date('Y-m-d');
+    $weekEnd = date('Y-m-d', strtotime('sunday this week'));
     $studentID = $_SESSION['student_id'];
     $dashboardFeedbackMessage = '';
 
@@ -102,11 +103,12 @@
             SELECT c2.clubID FROM clubs c2 WHERE c2.adminID = a.adminID ORDER BY c2.clubID DESC LIMIT 1
         )
         WHERE e.eventDate > ?
+          AND e.eventDate <= ?
           AND e.status = 'approved'
         ORDER BY e.eventDate ASC
         LIMIT 4
     ");
-    $upcomingStmt->bind_param("s", $currentDate);
+    $upcomingStmt->bind_param("ss", $currentDate, $weekEnd);
     $upcomingStmt->execute();
     $upcomingResult = $upcomingStmt->get_result();
     $upcomingStmt->close();
