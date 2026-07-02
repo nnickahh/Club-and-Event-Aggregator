@@ -61,6 +61,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Login</title>
     <link rel="stylesheet" type="text/css" href="Style.css">
 
@@ -82,46 +83,53 @@
         }
     </script>
 </head>
-<body class="login-body">
-    <div class="box">
-        <h2 class="h2">Log In</h2>
-        <div class="tabs">
-            <a href="StudentLogin.php" class="tab-btn active">Student</a>
-            <a href="AdminLogin.php" class="tab-btn">Admin</a>
-        </div>
-        
-        <?php echo $message; ?>
-
-        <?php if (isset($_GET['deleted']) && $_GET['deleted'] === '1'): ?>
-            <div class="msg-banner" style="background:var(--green-bg);color:var(--green);border:1px solid rgba(45,125,70,0.2);padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">
-                Your account has been deleted successfully.
+<body class="student-login-body">
+    <main class="student-login-shell">
+        <section class="student-login-visual" aria-label="INTI campus">
+            <img src="assets/inti-campus.jpeg" alt="INTI International College Penang campus">
+            <div class="student-login-visual-copy">
+                <span>INTI Campus Event System</span>
+                <h1>Student Access</h1>
+                <p>Register for campus events, manage activities, and keep track of club updates in one place.</p>
             </div>
-        <?php endif; ?>
+        </section>
 
-        <form action="StudentLogin.php" method="POST">
-            <div class="form-group">
-                <label>Email Address</label>
-                <input type="email" name="email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+        <section class="student-login-panel">
+            <div class="student-login-header">
+                <span class="login-kicker">Welcome Back</span>
+                <h2>Student Login</h2>
+                <p>Sign in with your student account to continue.</p>
+            </div>
 
-                <label>Password</label>
-                <div class="password-wrapper">
-                    <input type="password" name="password" id="password" required>
-                    <svg id="eye_icon" class="eye-icon" width="24" height="24" onclick="togglePassword()" viewBox="0 0 24 24">
-                        <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2z"/>
-                    </svg>
+            <div class="tabs student-login-tabs">
+                <a href="StudentLogin.php" class="tab-btn active">Student</a>
+                <a href="AdminLogin.php" class="tab-btn">Admin</a>
+            </div>
+
+            <?php echo $message; ?>
+
+            <form action="StudentLogin.php" method="POST" class="student-login-form">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" name="email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" placeholder="student@email.com">
+
+                    <label>Password</label>
+                    <div class="password-wrapper student-password-wrapper">
+                        <input type="password" name="password" id="password" required placeholder="Enter your password">
+                        <svg id="eye_icon" class="eye-icon" width="24" height="24" onclick="togglePassword()" viewBox="0 0 24 24">
+                            <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2z"/>
+                        </svg>
+                    </div>
                 </div>
-            </div>
-            
-            <!--  NEW LINE 97 (Triggers your PHP credential validation) -->
-            <button type="submit" name="submit" class="btn-primary">Log In</button>            
-            
-            <div class="links">
-                <a href="ForgotPassword.php">Forgot Password?</a>
-            </div>
-            <div class="links center-links">
-                Don't have an account? <a href="CreateStudent.php" class="link-primary">Sign Up</a>
-            </div>
-        </form>
-    </div>
+
+                <button type="submit" name="submit" class="btn-primary student-login-submit">Log In</button>
+
+                <div class="student-login-links">
+                    <a href="ForgotPassword.php">Forgot Password?</a>
+                    <span>New student? <a href="CreateStudent.php">Create account</a></span>
+                </div>
+            </form>
+        </section>
+    </main>
 </body>
 </html>
