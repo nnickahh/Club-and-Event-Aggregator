@@ -2323,6 +2323,24 @@ input:focus {
     border-color: #ED1C24;
 }
 
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    margin-bottom: 20px;
+    font-family: inherit;
+    font-size: 16px;
+    background: #fff;
+}
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #ED1C24;
+}
+
 /* For ClubSettings.php*/
 /* ==========================================================================
    PREMIUM CLUB PROFILE DASHBOARD STYLES
