@@ -200,55 +200,52 @@
                             $hasFeedback = !empty($row['feedbackID']);
                         ?>
                         <article class="past-card">
-                            <div class="past-card-body">
-                                <div class="past-card-top">
-                                    <div>
-                                        <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
-                                        <?php if (!empty($row['clubName'])): ?>
-                                            <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="past-club-link"><?php echo htmlspecialchars($row['clubName']); ?></a>
-                                        <?php endif; ?>
-                                    </div>
-                                    <span class="completed-pill">Completed</span>
-                                </div>
-
-                                <div class="past-card-meta">
-                                    <span><?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?> • <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> - <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?></span>
-                                    <span><?php echo htmlspecialchars($row['venue']); ?></span>
-                                    <span class="<?php echo $isPresent ? 'att-present' : 'att-absent'; ?>"><?php echo $isPresent ? 'Present' : 'Absent'; ?></span>
-                                </div>
-
-                                <div class="past-card-feedback">
-                                    <?php if ($hasFeedback): ?>
-                                        <div class="past-feedback-current">
-                                            <span class="feedback-stars"><?php echo str_repeat('★', (int)$row['rating']) . str_repeat('☆', 5 - (int)$row['rating']); ?></span>
-                                            <?php if (!empty($row['feedbackComment'])): ?>
-                                                <p><?php echo nl2br(htmlspecialchars($row['feedbackComment'])); ?></p>
-                                            <?php endif; ?>
-                                        </div>
+                            <div class="past-card-top">
+                                <div>
+                                    <h4><?php echo htmlspecialchars($row['eventTitle']); ?></h4>
+                                    <?php if (!empty($row['clubName'])): ?>
+                                        <a href="ClubsDetails.php?id=<?php echo (int)($row['clubID'] ?? 0); ?>" class="past-club-link"><?php echo htmlspecialchars($row['clubName']); ?></a>
                                     <?php endif; ?>
-                                    <form method="POST">
-                                        <input type="hidden" name="event_id" value="<?php echo (int)$row['eventID']; ?>">
-                                        <div class="past-feedback-inputs">
-                                            <div class="rating-row" aria-label="Star rating">
-                                                <?php for ($star = 5; $star >= 1; $star--): ?>
-                                                    <input type="radio" id="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>" name="rating" value="<?php echo $star; ?>" <?php echo (int)($row['rating'] ?? 0) === $star ? 'checked' : ''; ?> required>
-                                                    <label for="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>" title="<?php echo ['Poor', 'Fair', 'Average', 'Good', 'Excellent'][$star - 1]; ?>">★</label>
-                                                <?php endfor; ?>
-                                            </div>
-                                            <textarea name="comment" rows="2" placeholder="Leave a comment..."><?php echo htmlspecialchars($row['feedbackComment'] ?? ''); ?></textarea>
-                                            <button type="submit" name="submit_feedback" class="btn-sm btn-sm-outline"><?php echo $hasFeedback ? 'Update' : 'Review'; ?></button>
-                                        </div>
-                                    </form>
+                                </div>
+                                <div class="past-card-badges">
+                                    <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="past-details-btn">Details</a>
+                                    <span class="completed-pill">Completed</span>
                                 </div>
                             </div>
 
-                            <div class="past-card-actions">
-                                <a href="DetailedEvent.php?id=<?php echo (int)$row['eventID']; ?>" class="btn-sm btn-sm-outline">Details</a>
+                            <div class="past-card-meta">
+                                <span><?php echo formatDateRange($row['eventDate'], $row['eventEndDate'] ?? null); ?> • <?php echo date('h:iA', strtotime($row['eventTime'])); ?><?php if (!empty($row['eventEndTime'])): ?> - <?php echo date('h:iA', strtotime($row['eventEndTime'])); ?><?php endif; ?></span>
+                                <span><?php echo htmlspecialchars($row['venue']); ?></span>
+                                <span class="<?php echo $isPresent ? 'att-present' : 'att-absent'; ?>"><?php echo $isPresent ? 'Present' : 'Absent'; ?></span>
                                 <?php if ($isPresent): ?>
-                                    <a href="Certificate.php?id=<?php echo (int)$row['eventID']; ?>" class="past-cert-btn ready">Certificate</a>
+                                    <a href="Certificate.php?id=<?php echo (int)$row['eventID']; ?>" class="att-present cert-link">Certificate</a>
                                 <?php else: ?>
-                                    <div class="past-cert-btn locked">Certificate Locked</div>
+                                    <span class="att-absent cert-link">Certificate Locked</span>
                                 <?php endif; ?>
+                            </div>
+
+                            <div class="past-card-feedback">
+                                <?php if ($hasFeedback): ?>
+                                    <div class="past-feedback-current">
+                                        <span class="feedback-stars"><?php echo str_repeat('★', (int)$row['rating']) . str_repeat('☆', 5 - (int)$row['rating']); ?></span>
+                                        <?php if (!empty($row['feedbackComment'])): ?>
+                                            <p><?php echo nl2br(htmlspecialchars($row['feedbackComment'])); ?></p>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                                <form method="POST">
+                                    <input type="hidden" name="event_id" value="<?php echo (int)$row['eventID']; ?>">
+                                    <div class="past-feedback-inputs">
+                                        <div class="rating-row" aria-label="Star rating">
+                                            <?php for ($star = 5; $star >= 1; $star--): ?>
+                                                <input type="radio" id="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>" name="rating" value="<?php echo $star; ?>" <?php echo (int)($row['rating'] ?? 0) === $star ? 'checked' : ''; ?> required>
+                                                <label for="rating-<?php echo (int)$row['eventID']; ?>-<?php echo $star; ?>" title="<?php echo ['Poor', 'Fair', 'Average', 'Good', 'Excellent'][$star - 1]; ?>">★</label>
+                                            <?php endfor; ?>
+                                        </div>
+                                        <textarea name="comment" rows="2" placeholder="Leave a comment..."><?php echo htmlspecialchars($row['feedbackComment'] ?? ''); ?></textarea>
+                                        <button type="submit" name="submit_feedback" class="btn-sm btn-sm-outline"><?php echo $hasFeedback ? 'Update' : 'Review'; ?></button>
+                                    </div>
+                                </form>
                             </div>
                         </article>
                     <?php endforeach; ?>
