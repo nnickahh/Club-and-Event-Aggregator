@@ -94,7 +94,7 @@
 <body>
     <?php include 'ModeratorNavBar.php'; ?>
     <main class="container">
-        <div class="profile-box" style="max-width:500px;">
+        <div class="profile-box" style="max-width:500px;margin:0 auto;">
             <h2>Create Moderator</h2>
             <?php echo $message; ?>
             <form action="CreateModerator.php" method="POST">
